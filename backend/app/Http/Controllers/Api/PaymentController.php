@@ -3,114 +3,72 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Payment\StorePaymentRequest;
+use App\Http\Requests\Payment\UpdatePaymentRequest;
+use App\Http\Requests\Payment\ValidatePaymentRequest;
 use App\Models\Payment;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 
+/**
+ * Pagos. Los permisos están en App\Policies\PaymentPolicy y la validación
+ * en App\Http\Requests\Payment\*.
+ */
 class PaymentController extends Controller
 {
+    /**
+     * Listar pagos: admin/coordinador ven todos; el resto, solo los suyos (RF22).
+     */
     public function index(Request $request)
     {
         $query = Payment::query();
 
-        if (! $request->user()->isAdmin()) {
+        if (Gate::denies('viewAll', Payment::class)) {
             $query->where('student_id', $request->user()->id);
         }
 
         return response()->json($query->paginate(20));
     }
 
-    public function store(Request $request)
+    /** Registrar un pago (estudiante con perfil completo). */
+    public function store(StorePaymentRequest $request)
     {
-        if (! $request->user()->isEstudiante()) {
-            return response()->json(['message' => 'Solo los estudiantes pueden registrar pagos'], 403);
-        }
-
-        $data = $request->validate([
-            'enrollment_id' => ['nullable', 'exists:enrollments,id'],
-            'amount' => ['required', 'numeric', 'min:0'],
-            'currency' => ['nullable', 'string'],
-            'payment_method' => ['nullable', 'string'],
-            'receipt_url' => ['nullable', 'string'],
-            'partial' => ['nullable', 'boolean'],
-            'due_date' => ['nullable', 'date'],
-            'paid_date' => ['nullable', 'date'],
-            'notes' => ['nullable', 'string'],
-            'balance' => ['nullable', 'numeric', 'min:0'],
-            'installment_number' => ['nullable', 'integer', 'min:1'],
-            'total_installments' => ['nullable', 'integer', 'min:1'],
-            'installment_plan' => ['nullable', 'json'],
+        $payment = Payment::create([
+            ...$request->validated(),
+            'student_id' => $request->user()->id,
+            'status' => 'pending', // todo pago nace pendiente hasta que se valida (RF19)
         ]);
-
-        $data['student_id'] = $request->user()->id;
-        $payment = Payment::create($data);
 
         return response()->json($payment, 201);
     }
 
-    public function show(Request $request, Payment $payment)
+    public function show(Payment $payment)
     {
-        if (! $request->user()->isAdmin() && $payment->student_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        Gate::authorize('view', $payment);
 
         return response()->json($payment);
     }
 
-    public function update(Request $request, Payment $payment)
+    public function update(UpdatePaymentRequest $request, Payment $payment)
     {
-        if (! $request->user()->isAdmin() && $payment->student_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $rules = [
-            'amount' => ['nullable', 'numeric', 'min:0'],
-            'currency' => ['nullable', 'string'],
-            'payment_method' => ['nullable', 'string'],
-            'receipt_url' => ['nullable', 'string'],
-            'partial' => ['nullable', 'boolean'],
-            'due_date' => ['nullable', 'date'],
-            'paid_date' => ['nullable', 'date'],
-            'notes' => ['nullable', 'string'],
-            'balance' => ['nullable', 'numeric', 'min:0'],
-            'installment_number' => ['nullable', 'integer', 'min:1'],
-            'total_installments' => ['nullable', 'integer', 'min:1'],
-            'installment_plan' => ['nullable', 'json'],
-        ];
-
-        if ($request->user()->isAdmin()) {
-            $rules['status'] = ['nullable', Rule::in(['pending', 'completed', 'failed', 'refunded'])];
-        }
-
-        $data = $request->validate($rules);
-
-        if (! $request->user()->isAdmin()) {
-            unset($data['status']);
-        }
-
-        $payment->update($data);
+        $payment->update($request->validated());
 
         return response()->json($payment);
     }
 
-    public function destroy(Request $request, Payment $payment)
+    public function destroy(Payment $payment)
     {
-        if (! $request->user()->isAdmin() && $payment->student_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        Gate::authorize('delete', $payment);
 
         $payment->delete();
 
         return response()->json(['success' => true]);
     }
 
-    public function validatePayment(Request $request, Payment $payment)
+    /** Validar el pago: cambia su estado (admin o coordinador). */
+    public function validatePayment(ValidatePaymentRequest $request, Payment $payment)
     {
-        $data = $request->validate([
-            'status' => ['required', Rule::in(['pending', 'completed', 'failed', 'refunded'])],
-        ]);
-
-        $payment->update($data);
+        $payment->update($request->validated());
 
         return response()->json($payment);
     }

@@ -47,8 +47,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('careers', CareerController::class);
     Route::apiResource('classrooms', ClassroomController::class);
     Route::apiResource('courses', CourseController::class);
-    Route::apiResource('enrollments', EnrollmentController::class);
-    Route::apiResource('payments', PaymentController::class);
+    // Matrícula y pagos: crear/editar exige perfil completo (DNI y teléfono).
+    // Los permisos por rol están en EnrollmentPolicy y PaymentPolicy.
+    Route::middleware('profile.completed')->group(function () {
+        Route::post('/enrollments', [EnrollmentController::class, 'store'])->name('enrollments.store');
+        Route::match(['put', 'patch'], '/enrollments/{enrollment}', [EnrollmentController::class, 'update'])->name('enrollments.update');
+        Route::post('/payments', [PaymentController::class, 'store'])->name('payments.store');
+    });
+    Route::apiResource('enrollments', EnrollmentController::class)->except(['store', 'update']);
+    Route::apiResource('payments', PaymentController::class)->except(['store']);
+    Route::put('/enrollments/{enrollment}/status', [EnrollmentController::class, 'updateStatus'])->name('enrollments.status');
+    Route::put('/payments/{payment}/validate', [PaymentController::class, 'validatePayment'])->name('payments.validate');
     Route::apiResource('schedules', ScheduleController::class);
     Route::get('/semesters/current', [SemesterController::class, 'current']);
     Route::apiResource('semesters', SemesterController::class);
@@ -66,9 +75,4 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/enrollments/{enrollment}/carnet/preview', [CarnetController::class, 'preview']);
     Route::get('/enrollments/{enrollment}/carnet/download', [CarnetController::class, 'download']);
-
-    Route::middleware('role:admin,coordinador')->group(function () {
-        Route::put('/enrollments/{enrollment}/status', [EnrollmentController::class, 'updateStatus']);
-        Route::put('/payments/{payment}/validate', [PaymentController::class, 'validatePayment']);
-    });
 });

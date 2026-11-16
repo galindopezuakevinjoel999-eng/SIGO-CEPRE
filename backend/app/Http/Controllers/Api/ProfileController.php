@@ -48,7 +48,9 @@ class ProfileController extends Controller
         }
 
         $user->fill($data);
-        $user->profile_completed = ! empty($user->dni) && ! empty($user->phone) && ! empty($user->name);
+        // El perfil está completo cuando tiene DNI y teléfono (RF09). Habilita la
+        // matrícula y los pagos (middleware profile.completed).
+        $user->profile_completed = filled($user->dni) && filled($user->phone);
         $user->save();
 
         $user->append('profile_percentage');

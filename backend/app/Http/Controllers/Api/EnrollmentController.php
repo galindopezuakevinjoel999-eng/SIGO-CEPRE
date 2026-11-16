@@ -3,21 +3,29 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Enrollment\StoreEnrollmentRequest;
+use App\Http\Requests\Enrollment\UpdateEnrollmentRequest;
+use App\Http\Requests\Enrollment\UpdateEnrollmentStatusRequest;
 use App\Models\Enrollment;
+use App\Models\Semester;
 use App\Services\EnrollmentCodeService;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 
+/**
+ * Matrículas. Los permisos están en App\Policies\EnrollmentPolicy y la
+ * validación en App\Http\Requests\Enrollment\*.
+ */
 class EnrollmentController extends Controller
 {
     /**
-     * Listar matrículas. Admin/coordinador ve todas, estudiante solo las suyas.
+     * Listar matrículas: admin/coordinador ven todas; el resto, solo las suyas.
      */
     public function index(Request $request)
     {
         $query = Enrollment::with(['career', 'classroom', 'semester', 'student']);
 
-        if ($request->user()->isEstudiante()) {
+        if (Gate::denies('viewAll', Enrollment::class)) {
             $query->where('student_id', $request->user()->id);
         }
 
@@ -25,17 +33,13 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Crear nueva solicitud de matrícula (solo estudiantes).
-     * Soporta creación por pasos con campo current_step.
+     * Crear la solicitud de matrícula (estudiante con perfil completo).
+     * Soporta creación por pasos con el campo "step".
      */
-    public function store(Request $request)
+    public function store(StoreEnrollmentRequest $request)
     {
-        if (! $request->user()->isEstudiante()) {
-            return response()->json(['message' => 'Solo los estudiantes pueden solicitar matrícula'], 403);
-        }
-
-        // Verificar que no tenga matrícula activa en el semestre actual
-        $activeSemester = \App\Models\Semester::current();
+        // Una sola matrícula activa o pendiente por semestre.
+        $activeSemester = Semester::current();
         if ($activeSemester) {
             $existing = Enrollment::where('student_id', $request->user()->id)
                 ->where('semester_id', $activeSemester->id)
@@ -50,15 +54,9 @@ class EnrollmentController extends Controller
             }
         }
 
-        $step = $request->input('step', 1);
-
-        // Validación por paso
-        $rules = $this->getStepValidationRules($step);
-        $data = $request->validate($rules);
-
+        $data = $request->enrollmentData();
         $data['student_id'] = $request->user()->id;
         $data['status'] = 'pending';
-        $data['current_step'] = $step;
 
         if ($activeSemester && empty($data['semester_id'])) {
             $data['semester_id'] = $activeSemester->id;
@@ -69,80 +67,40 @@ class EnrollmentController extends Controller
         return response()->json($enrollment->load(['career', 'classroom', 'semester']), 201);
     }
 
-    /**
-     * Ver una matrícula específica.
-     */
-    public function show(Request $request, Enrollment $enrollment)
+    public function show(Enrollment $enrollment)
     {
-        if ($request->user()->isEstudiante() && $enrollment->student_id !== $request->user()->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        Gate::authorize('view', $enrollment);
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester', 'student']));
     }
 
     /**
-     * Actualizar matrícula (estudiante actualiza su progreso, staff cambia status).
+     * El estudiante guarda el avance de su matrícula pendiente (RF11).
+     * El estado se cambia solo con updateStatus().
      */
-    public function update(Request $request, Enrollment $enrollment)
+    public function update(UpdateEnrollmentRequest $request, Enrollment $enrollment)
     {
-        $user = $request->user();
-
-        if ($user->isEstudiante() && $enrollment->student_id !== $user->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        // Estudiantes solo pueden editar si está pendiente
-        if ($user->isEstudiante() && $enrollment->status !== 'pending') {
-            return response()->json(['message' => 'No puedes editar una matrícula que ya fue procesada'], 422);
-        }
-
-        $step = $request->input('step', $enrollment->current_step);
-        $rules = $this->getStepValidationRules($step, false);
-
-        // Solo admin y coordinador pueden cambiar el status desde esta ruta
-        if ($user->isAdmin() || $user->isCoordinador()) {
-            $rules['status'] = ['nullable', Rule::in(['pending', 'approved', 'rejected'])];
-        }
-
-        $data = $request->validate($rules);
-        $data['current_step'] = $step;
-
-        $enrollment->update($data);
+        $enrollment->update($request->enrollmentData());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']));
     }
 
-    /**
-     * Eliminar matrícula (solo si está pendiente).
-     */
-    public function destroy(Request $request, Enrollment $enrollment)
+    public function destroy(Enrollment $enrollment)
     {
-        $user = $request->user();
-
-        if ($user->isEstudiante() && $enrollment->student_id !== $user->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        if ($enrollment->status !== 'pending') {
-            return response()->json(['message' => 'Solo se pueden eliminar matrículas pendientes'], 422);
-        }
+        Gate::authorize('delete', $enrollment);
 
         $enrollment->delete();
+
         return response()->json(['success' => true]);
     }
 
     /**
      * Aprobar o rechazar matrícula (admin o coordinador).
-     * Al aprobar con pago confirmado, genera código de matrícula.
+     * Al aprobar con carrera y aula asignadas, genera el código de matrícula.
      */
-    public function updateStatus(Request $request, Enrollment $enrollment)
+    public function updateStatus(UpdateEnrollmentStatusRequest $request, Enrollment $enrollment)
     {
-        $data = $request->validate([
-            'status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
-            'rejection_reason' => ['required_if:status,rejected', 'nullable', 'string', 'max:500'],
-            'classroom_id' => ['nullable', 'exists:classrooms,id'],
-        ]);
+        $data = $request->validated();
 
         $enrollment->status = $data['status'];
 
@@ -177,47 +135,5 @@ class EnrollmentController extends Controller
         $enrollment->save();
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester', 'student']));
-    }
-
-    /**
-     * Reglas de validación por paso del formulario.
-     */
-    private function getStepValidationRules(int $step, bool $required = true): array
-    {
-        $req = $required ? 'required' : 'nullable';
-
-        return match ($step) {
-            // Paso 1: Verificar perfil (no necesita datos extra, el frontend verifica)
-            1 => [
-                'career_id' => ['nullable', 'exists:careers,id'],
-                'documents' => ['nullable', 'array'],
-                'progress' => ['nullable', 'array'],
-            ],
-            // Paso 2: Seleccionar carrera
-            2 => [
-                'career_id' => [$req, 'exists:careers,id'],
-                'documents' => ['nullable', 'array'],
-                'progress' => ['nullable', 'array'],
-            ],
-            // Paso 3: Subir documentos
-            3 => [
-                'career_id' => [$req, 'exists:careers,id'],
-                'documents' => [$req, 'array'],
-                'progress' => ['nullable', 'array'],
-            ],
-            // Paso 4: Confirmación final
-            4 => [
-                'career_id' => [$req, 'exists:careers,id'],
-                'documents' => [$req, 'array'],
-                'progress' => ['nullable', 'array'],
-                'classroom_id' => ['nullable', 'exists:classrooms,id'],
-                'semester_id' => ['nullable', 'exists:semesters,id'],
-            ],
-            default => [
-                'career_id' => ['nullable', 'exists:careers,id'],
-                'documents' => ['nullable', 'array'],
-                'progress' => ['nullable', 'array'],
-            ],
-        };
     }
 }
