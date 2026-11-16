@@ -110,7 +110,10 @@ class SemesterAttendanceTest extends TestCase
     {
         $old = Semester::factory()->create(['code' => '261', 'year' => 2026, 'cycle' => 1]);
         $oldSchedule = Schedule::factory()->for($old)->create();
-        Attendance::factory()->absent()->count(12)->for($this->student, 'student')->for($oldSchedule)->create();
+        // Fechas fijas (abril) para no chocar con la falta del 30 de mayo de abajo.
+        Attendance::factory()->absent()->count(12)->for($this->student, 'student')->for($oldSchedule)
+            ->sequence(fn ($s) => ['date' => sprintf('2026-04-%02d', $s->index + 1)])
+            ->create();
 
         // Un registro en el horario antiguo dispara el recálculo, pero no cuenta.
         $this->recordAbsence($oldSchedule, '2026-05-30');
@@ -139,6 +142,21 @@ class SemesterAttendanceTest extends TestCase
         Semester::factory()->create(['code' => '271', 'year' => 2027, 'cycle' => 1])->activate();
 
         $this->assertSame('en_riesgo', $this->teacher->fresh()->student_status);
+    }
+
+    public function test_no_se_registra_dos_veces_la_misma_asistencia(): void
+    {
+        $this->recordAbsence($this->schedule2026II, '2026-09-01');
+
+        $this->actingAs($this->teacher)
+            ->postJson('/api/attendance', [
+                'student_id' => $this->student->id,
+                'schedule_id' => $this->schedule2026II->id,
+                'date' => '2026-09-01',
+                'status' => 'present',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['date' => 'Ya se registró la asistencia de este estudiante en este horario y fecha.']);
     }
 
     public function test_toda_falta_debe_indicar_su_horario(): void

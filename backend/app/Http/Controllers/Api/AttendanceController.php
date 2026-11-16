@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Schedule;
 use App\Models\User;
+use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class AttendanceController extends Controller
 {
@@ -33,7 +35,18 @@ class AttendanceController extends Controller
             // Obligatorio: el horario define el semestre de la falta, y solo
             // cuentan las del semestre activo (User::refreshAttendanceStatus()).
             'schedule_id' => ['required', 'exists:schedules,id'],
-            'date' => ['required', 'date'],
+            // Un registro por estudiante, horario y día (índice único en la tabla).
+            // whereDate compara solo el día, en MySQL y en SQLite.
+            'date' => ['bail', 'required', 'date', function (string $attribute, mixed $value, Closure $fail) use ($request) {
+                $exists = Attendance::where('student_id', $request->input('student_id'))
+                    ->where('schedule_id', $request->input('schedule_id'))
+                    ->whereDate('date', Carbon::parse($value)->toDateString())
+                    ->exists();
+
+                if ($exists) {
+                    $fail('Ya se registró la asistencia de este estudiante en este horario y fecha.');
+                }
+            }],
             'status' => ['required', 'in:present,absent,late'],
             'remarks' => ['nullable', 'string'],
         ]);
