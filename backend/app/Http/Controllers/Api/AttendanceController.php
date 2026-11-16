@@ -29,10 +29,17 @@ class AttendanceController extends Controller
         $data = $request->validate([
             'student_id' => ['required', 'exists:users,id'],
             'course_id' => ['nullable', 'exists:courses,id'],
+            'schedule_id' => ['nullable', 'exists:schedules,id'],
             'date' => ['required', 'date'],
             'status' => ['required', 'in:present,absent,late'],
-            'notes' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string'],
         ]);
+
+        // Si se indica el horario, el curso se toma de él.
+        if (! empty($data['schedule_id']) && empty($data['course_id'])) {
+            $data['course_id'] = \App\Models\Schedule::find($data['schedule_id'])?->course_id;
+        }
+        $data['recorded_by'] = $request->user()->id;
 
         $attendance = Attendance::create($data);
         $this->syncStudentAttendanceStatus($attendance->student);
@@ -58,9 +65,10 @@ class AttendanceController extends Controller
         $data = $request->validate([
             'student_id' => ['nullable', 'exists:users,id'],
             'course_id' => ['nullable', 'exists:courses,id'],
+            'schedule_id' => ['nullable', 'exists:schedules,id'],
             'date' => ['nullable', 'date'],
             'status' => ['nullable', 'in:present,absent,late'],
-            'notes' => ['nullable', 'string'],
+            'remarks' => ['nullable', 'string'],
         ]);
 
         $attendance->update($data);

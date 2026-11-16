@@ -140,9 +140,16 @@ class EnrollmentController extends Controller
     {
         $data = $request->validate([
             'status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
+            'rejection_reason' => ['required_if:status,rejected', 'nullable', 'string', 'max:500'],
+            'classroom_id' => ['nullable', 'exists:classrooms,id'],
         ]);
 
         $enrollment->status = $data['status'];
+
+        // El administrador asigna el aula al aprobar (necesaria para el código de matrícula).
+        if (! empty($data['classroom_id'])) {
+            $enrollment->classroom_id = $data['classroom_id'];
+        }
 
         if ($data['status'] === 'approved') {
             $enrollment->approved_at = now();
@@ -164,6 +171,7 @@ class EnrollmentController extends Controller
         if ($data['status'] === 'rejected') {
             $enrollment->rejected_at = now();
             $enrollment->approved_at = null;
+            $enrollment->rejection_reason = $data['rejection_reason'];
         }
 
         $enrollment->save();

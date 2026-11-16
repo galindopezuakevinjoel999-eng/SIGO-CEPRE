@@ -4,8 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Course;
-use App\Models\User;
 
 class Attendance extends Model
 {
@@ -14,9 +12,11 @@ class Attendance extends Model
     protected $fillable = [
         'student_id',
         'course_id',
+        'schedule_id',
         'date',
         'status',
         'remarks',
+        'recorded_by',
     ];
 
     protected $casts = [
@@ -31,5 +31,15 @@ class Attendance extends Model
     public function course()
     {
         return $this->belongsTo(Course::class);
+    }
+
+    public function schedule()
+    {
+        return $this->belongsTo(Schedule::class);
+    }
+
+    public function recorder()
+    {
+        return $this->belongsTo(User::class, 'recorded_by');
     }
 }
