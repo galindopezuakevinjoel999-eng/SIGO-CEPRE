@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\Schedule;
 use App\Models\User;
 use Illuminate\Http\Request;
 
@@ -29,15 +30,17 @@ class AttendanceController extends Controller
         $data = $request->validate([
             'student_id' => ['required', 'exists:users,id'],
             'course_id' => ['nullable', 'exists:courses,id'],
-            'schedule_id' => ['nullable', 'exists:schedules,id'],
+            // Obligatorio: el horario define el semestre de la falta, y solo
+            // cuentan las del semestre activo (User::refreshAttendanceStatus()).
+            'schedule_id' => ['required', 'exists:schedules,id'],
             'date' => ['required', 'date'],
             'status' => ['required', 'in:present,absent,late'],
             'remarks' => ['nullable', 'string'],
         ]);
 
         // Si se indica el horario, el curso se toma de él.
-        if (! empty($data['schedule_id']) && empty($data['course_id'])) {
-            $data['course_id'] = \App\Models\Schedule::find($data['schedule_id'])?->course_id;
+        if (empty($data['course_id'])) {
+            $data['course_id'] = Schedule::find($data['schedule_id'])?->course_id;
         }
         $data['recorded_by'] = $request->user()->id;
 
@@ -65,7 +68,7 @@ class AttendanceController extends Controller
         $data = $request->validate([
             'student_id' => ['nullable', 'exists:users,id'],
             'course_id' => ['nullable', 'exists:courses,id'],
-            'schedule_id' => ['nullable', 'exists:schedules,id'],
+            'schedule_id' => ['sometimes', 'exists:schedules,id'], // se puede cambiar, no vaciar
             'date' => ['nullable', 'date'],
             'status' => ['nullable', 'in:present,absent,late'],
             'remarks' => ['nullable', 'string'],

@@ -41,12 +41,15 @@ class SemesterController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        // Si se activa este semestre, desactivar los demás
-        if (! empty($data['is_active']) && $data['is_active']) {
-            Semester::where('is_active', true)->update(['is_active' => false]);
+        $activate = ! empty($data['is_active']);
+        $semester = Semester::create([...$data, 'is_active' => false]);
+
+        // Desactiva los demás y reinicia las faltas de los estudiantes.
+        if ($activate) {
+            $semester->activate();
         }
 
-        return response()->json(Semester::create($data), 201);
+        return response()->json($semester, 201);
     }
 
     public function show(Semester $semester)
@@ -70,12 +73,20 @@ class SemesterController extends Controller
             'is_active' => ['nullable', 'boolean'],
         ]);
 
-        if (! empty($data['is_active']) && $data['is_active']) {
-            Semester::where('is_active', true)->where('id', '!=', $semester->id)->update(['is_active' => false]);
+        // Activar pasa por Semester::activate() (reinicia el ciclo); desactivar
+        // (is_active = false) se guarda como un campo más.
+        $activate = ! empty($data['is_active']);
+        if ($activate) {
+            unset($data['is_active']);
         }
 
         $semester->update($data);
-        return response()->json($semester);
+
+        if ($activate) {
+            $semester->activate();
+        }
+
+        return response()->json($semester->refresh());
     }
 
     public function destroy(Semester $semester)

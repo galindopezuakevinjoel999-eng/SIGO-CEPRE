@@ -3,6 +3,8 @@
 namespace Tests\Feature\Academic;
 
 use App\Models\Attendance;
+use App\Models\Schedule;
+use App\Models\Semester;
 use App\Models\SystemSetting;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -17,18 +19,22 @@ class AttendanceThresholdTest extends TestCase
 
     private User $student;
 
+    private Schedule $schedule;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->teacher = User::factory()->teacher()->create();
         $this->student = User::factory()->student()->create(['student_status' => 'activo']);
+        $this->schedule = Schedule::factory()->for(Semester::factory()->active())->create();
     }
 
     private function recordAbsence(int $day)
     {
         return $this->actingAs($this->teacher)->postJson('/api/attendance', [
             'student_id' => $this->student->id,
+            'schedule_id' => $this->schedule->id,
             'date' => now()->subDays($day)->toDateString(),
             'status' => 'absent',
         ])->assertCreated();

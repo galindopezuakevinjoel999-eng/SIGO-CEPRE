@@ -88,11 +88,11 @@ class FoundationSeeder extends Seeder
     {
         $semester = Semester::updateOrCreate(
             ['code' => self::ACTIVE_SEMESTER_CODE],
-            ['year' => 2026, 'cycle' => 2, 'name' => '2026-II', 'is_active' => true],
+            ['year' => 2026, 'cycle' => 2, 'name' => '2026-II'],
         );
 
-        // Solo puede haber un semestre activo (Semester::current()).
-        Semester::whereKeyNot($semester->id)->update(['is_active' => false]);
+        // Único activo. Si ya lo era, no reinicia las faltas del ciclo en curso.
+        $semester->activate();
 
         return $semester;
     }
