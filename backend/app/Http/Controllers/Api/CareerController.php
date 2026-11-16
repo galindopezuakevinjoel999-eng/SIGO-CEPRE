@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Career;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CareerController extends Controller
 {
@@ -25,7 +26,7 @@ class CareerController extends Controller
         $data = $request->validate([
             'code' => ['required', 'string', 'max:10', 'unique:careers,code'],
             'name' => ['required', 'string'],
-            'group' => ['required', 'in:A,B'],
+            'group' => ['required', Rule::in(array_keys(Career::GROUPS))],
             'description' => ['nullable', 'string'],
             'status' => ['nullable', 'in:active,inactive'],
         ]);
@@ -47,7 +48,7 @@ class CareerController extends Controller
         $data = $request->validate([
             'code' => ['nullable', 'string', 'max:10', 'unique:careers,code,'.$career->id],
             'name' => ['nullable', 'string'],
-            'group' => ['nullable', 'in:A,B'],
+            'group' => ['nullable', Rule::in(array_keys(Career::GROUPS))],
             'description' => ['nullable', 'string'],
             'status' => ['nullable', 'in:active,inactive'],
         ]);

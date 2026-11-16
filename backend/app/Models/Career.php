@@ -9,6 +9,13 @@ class Career extends Model
 {
     use HasFactory;
 
+    /** Grupos de carreras del CEPRE UNAJMA (primera letra del código de matrícula). */
+    public const GROUPS = [
+        'A' => 'Ingenierías',
+        'B' => 'Salud',
+        'C' => 'Ciencias de la empresa',
+    ];
+
     protected $fillable = [
         'code',
         'name',
@@ -18,19 +25,11 @@ class Career extends Model
     ];
 
     /**
-     * Obtener las carreras del grupo A (Ingeniería).
+     * Carreras de un grupo (ver GROUPS). Uso: Career::group('A')->get()
      */
-    public function scopeGroupA($query)
+    public function scopeGroup($query, string $group)
     {
-        return $query->where('group', 'A');
-    }
-
-    /**
-     * Obtener las carreras del grupo B (Educación, Administración, Contabilidad, etc.).
-     */
-    public function scopeGroupB($query)
-    {
-        return $query->where('group', 'B');
+        return $query->where('group', strtoupper($group));
     }
 
     public function scopeActive($query)

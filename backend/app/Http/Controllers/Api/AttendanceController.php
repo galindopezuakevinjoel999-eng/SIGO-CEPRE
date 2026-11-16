@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
-use App\Models\SystemNotification;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class AttendanceController extends Controller
@@ -90,30 +90,12 @@ class AttendanceController extends Controller
         return response()->json(['success' => true]);
     }
 
-    private function syncStudentAttendanceStatus($student): void
+    /**
+     * Los umbrales de faltas salen de system_settings (absence_warning_1 y
+     * max_absences); la regla vive en User::refreshAttendanceStatus().
+     */
+    private function syncStudentAttendanceStatus(User $student): void
     {
-        $absences = $student->attendances()->where('status', 'absent')->count();
-        $previousStatus = $student->student_status;
-
-        $student->absence_count = $absences;
-
-        if ($absences >= 10) {
-            $student->student_status = 'inhabilitado';
-        } elseif ($absences >= 5) {
-            $student->student_status = 'en_riesgo';
-        } else {
-            $student->student_status = 'activo';
-        }
-
-        $student->save();
-
-        if ($previousStatus !== $student->student_status) {
-            SystemNotification::create([
-                'user_id' => $student->id,
-                'type' => 'attendance_status',
-                'title' => 'Tu estatus académico ha cambiado',
-                'message' => "Tu estatus ha cambiado a {$student->student_status} por {$student->absence_count} faltas.",
-            ]);
-        }
+        $student->refreshAttendanceStatus();
     }
 }
