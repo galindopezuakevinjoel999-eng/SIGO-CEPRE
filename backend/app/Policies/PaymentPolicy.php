@@ -63,9 +63,9 @@ class PaymentPolicy
             return Response::deny('No tienes acceso a este pago.');
         }
 
-        return $payment->status === 'pending'
+        return $payment->isPending()
             ? Response::allow()
-            : Response::deny('No puedes modificar un pago que ya fue validado.');
+            : Response::deny('No puedes modificar un pago que ya fue revisado (validado o rechazado).');
     }
 
     private function owns(User $user, Payment $payment): bool

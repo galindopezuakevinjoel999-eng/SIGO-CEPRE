@@ -7,8 +7,8 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 
 /**
- * Corregir los datos de un pago. El estado no se cambia aquí: se valida con
- * ValidatePaymentRequest (PUT /payments/{id}/validate).
+ * Corregir un pago pendiente. No cambia la matrícula ni el estado: el estado
+ * se revisa con ValidatePaymentRequest (PUT /payments/{id}/validate).
  */
 class UpdatePaymentRequest extends FormRequest
 {
@@ -20,5 +20,10 @@ class UpdatePaymentRequest extends FormRequest
     public function rules(): array
     {
         return PaymentFields::rules(required: false);
+    }
+
+    public function messages(): array
+    {
+        return PaymentFields::messages();
     }
 }

@@ -11,6 +11,13 @@ class Payment extends Model
 {
     use HasFactory;
 
+    // Estados del pago (RF19).
+    public const STATUS_PENDING = 'pending';
+
+    public const STATUS_VALIDATED = 'validated';
+
+    public const STATUS_REJECTED = 'rejected';
+
     protected $fillable = [
         'student_id',
         'enrollment_id',
@@ -27,6 +34,9 @@ class Payment extends Model
         'installment_number',
         'total_installments',
         'installment_plan',
+        'validated_by',
+        'validated_at',
+        'rejection_reason',
     ];
 
     protected $casts = [
@@ -34,6 +44,7 @@ class Payment extends Model
         'due_date' => 'date',
         'paid_date' => 'date',
         'installment_plan' => 'array',
+        'validated_at' => 'datetime',
     ];
 
     public function student()
@@ -44,5 +55,16 @@ class Payment extends Model
     public function enrollment()
     {
         return $this->belongsTo(Enrollment::class);
+    }
+
+    /** Admin o coordinador que validó o rechazó el pago. */
+    public function validator()
+    {
+        return $this->belongsTo(User::class, 'validated_by');
+    }
+
+    public function isPending(): bool
+    {
+        return $this->status === self::STATUS_PENDING;
     }
 }

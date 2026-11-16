@@ -8,8 +8,10 @@ use App\Http\Requests\Enrollment\UpdateEnrollmentRequest;
 use App\Http\Requests\Enrollment\UpdateEnrollmentStatusRequest;
 use App\Models\Enrollment;
 use App\Models\Semester;
+use App\Services\AuditLogger;
 use App\Services\EnrollmentCodeService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 /**
@@ -95,12 +97,14 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Aprobar o rechazar matrícula (admin o coordinador).
-     * Al aprobar con carrera y aula asignadas, genera el código de matrícula.
+     * Aprobar o rechazar matrícula (admin o coordinador). Aprobar exige un pago
+     * validado (UpdateEnrollmentStatusRequest). Con carrera y aula asignadas,
+     * genera el código de matrícula. Cada decisión queda en audit_logs.
      */
-    public function updateStatus(UpdateEnrollmentStatusRequest $request, Enrollment $enrollment)
+    public function updateStatus(UpdateEnrollmentStatusRequest $request, Enrollment $enrollment, AuditLogger $audit)
     {
         $data = $request->validated();
+        $previousStatus = $enrollment->status;
 
         $enrollment->status = $data['status'];
 
@@ -132,7 +136,25 @@ class EnrollmentController extends Controller
             $enrollment->rejection_reason = $data['rejection_reason'];
         }
 
-        $enrollment->save();
+        DB::transaction(function () use ($enrollment, $audit, $request, $data, $previousStatus) {
+            $enrollment->save();
+
+            $audit->record(
+                $request->user(),
+                $enrollment->student_id,
+                match ($data['status']) {
+                    'approved' => AuditLogger::ENROLLMENT_APPROVED,
+                    'rejected' => AuditLogger::ENROLLMENT_REJECTED,
+                    default => AuditLogger::ENROLLMENT_REOPENED,
+                },
+                $data['rejection_reason'] ?? null,
+                [
+                    'enrollment_id' => $enrollment->id,
+                    'previous_status' => $previousStatus,
+                    'new_status' => $data['status'],
+                ],
+            );
+        });
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester', 'student']));
     }

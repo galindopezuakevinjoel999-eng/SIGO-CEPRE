@@ -51,6 +51,10 @@ class FoundationSeeder extends Seeder
             ['key' => 'absence_warning_1', 'value' => '5', 'type' => 'integer', 'description' => 'Primera alerta de faltas'],
             ['key' => 'absence_warning_2', 'value' => '8', 'type' => 'integer', 'description' => 'Segunda alerta de faltas (incluye coordinador)'],
             ['key' => 'institution_name', 'value' => 'CEPRE UNAJMA', 'type' => 'string', 'description' => 'Nombre de la institución'],
+            // Costo total de la matrícula en soles. Sin valor, el sistema no acepta pagos:
+            // el administrador debe configurarlo (el saldo se calcula a partir de él).
+            ['key' => 'enrollment_cost', 'value' => null, 'type' => 'decimal', 'description' => 'Costo total de la matrícula (S/)'],
+            ['key' => 'enrollment_installments', 'value' => '1', 'type' => 'integer', 'description' => 'Número de cuotas en que se puede pagar la matrícula'],
             ['key' => 'institution_full_name', 'value' => 'Centro Pre Universitario - Universidad Nacional José María Arguedas', 'type' => 'string', 'description' => 'Nombre completo de la institución'],
         ];
 

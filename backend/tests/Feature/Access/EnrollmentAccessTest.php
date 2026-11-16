@@ -3,6 +3,7 @@
 namespace Tests\Feature\Access;
 
 use App\Models\Enrollment;
+use App\Models\Payment;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -158,6 +159,8 @@ class EnrollmentAccessTest extends TestCase
 
     public function test_el_coordinador_aprueba_una_matricula(): void
     {
+        Payment::factory()->validated()->for($this->studentA, 'student')->for($this->enrollmentA)->create();
+
         $this->actingAs(User::factory()->coordinator()->create())
             ->putJson("/api/enrollments/{$this->enrollmentA->id}/status", ['status' => 'approved'])
             ->assertOk()

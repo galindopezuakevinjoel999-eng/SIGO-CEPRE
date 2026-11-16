@@ -60,4 +60,20 @@ class Enrollment extends Model
     {
         return $this->hasMany(Payment::class);
     }
+
+    public function validatedPayments()
+    {
+        return $this->payments()->where('status', Payment::STATUS_VALIDATED);
+    }
+
+    /** Requisito para aprobar la matrícula: al menos un pago validado. */
+    public function hasValidatedPayment(): bool
+    {
+        return $this->validatedPayments()->exists();
+    }
+
+    public function validatedPaymentsTotal(): float
+    {
+        return (float) $this->validatedPayments()->sum('amount');
+    }
 }
