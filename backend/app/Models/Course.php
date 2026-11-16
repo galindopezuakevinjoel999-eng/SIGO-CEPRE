@@ -12,11 +12,31 @@ class Course extends Model
     protected $fillable = [
         'code',
         'name',
-        'career',
+        'career_id',
+        'semester_id',
         'description',
         'credits',
         'max_students',
-        'semester',
         'status',
     ];
+
+    public function career()
+    {
+        return $this->belongsTo(Career::class);
+    }
+
+    public function semester()
+    {
+        return $this->belongsTo(Semester::class);
+    }
+
+    public function schedules()
+    {
+        return $this->hasMany(Schedule::class);
+    }
+
+    public function materials()
+    {
+        return $this->hasMany(Material::class);
+    }
 }

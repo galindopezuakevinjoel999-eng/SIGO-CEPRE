@@ -13,7 +13,7 @@ return new class extends Migration
             $table->id();
             $table->string('code', 10)->unique();         // ING, EDU, ADM, CON, etc.
             $table->string('name');                         // Ingeniería de Sistemas, etc.
-            $table->char('group', 1);                       // A o B
+            $table->char('group', 1);                       // A (Ingenierías), B (Salud) o C (Ciencias de la empresa)
             $table->text('description')->nullable();
             $table->enum('status', ['active', 'inactive'])->default('active');
             $table->timestamps();

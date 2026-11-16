@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -11,15 +10,16 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database.
+     * Catálogo del CEPRE en todos los entornos; datos de prueba solo en local.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call(FoundationSeeder::class);
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        if (app()->isLocal()) {
+            $this->call(DemoSeeder::class);
+        } else {
+            $this->command?->warn('Sin datos de prueba (APP_ENV no es local). Crea el administrador y configura enrollment_cost manualmente.');
+        }
     }
 }

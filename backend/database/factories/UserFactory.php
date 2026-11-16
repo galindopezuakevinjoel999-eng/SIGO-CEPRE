@@ -42,4 +42,34 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    public function student(): static
+    {
+        return $this->state(['role' => User::ROLE_ESTUDIANTE, 'status' => 'active']);
+    }
+
+    public function admin(): static
+    {
+        return $this->state(['role' => User::ROLE_ADMIN, 'status' => 'active']);
+    }
+
+    public function coordinator(): static
+    {
+        return $this->state(['role' => User::ROLE_COORDINADOR, 'status' => 'active']);
+    }
+
+    public function teacher(): static
+    {
+        return $this->state(['role' => User::ROLE_DOCENTE, 'status' => 'active']);
+    }
+
+    /** Perfil con DNI y teléfono: puede matricularse y registrar pagos. */
+    public function withCompletedProfile(): static
+    {
+        return $this->state(fn () => [
+            'dni' => fake()->unique()->numerify('########'),
+            'phone' => fake()->numerify('9########'),
+            'profile_completed' => true,
+        ]);
+    }
 }

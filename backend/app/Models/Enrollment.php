@@ -15,8 +15,6 @@ class Enrollment extends Model
 
     protected $fillable = [
         'student_id',
-        'course_id',
-        'career',
         'career_id',
         'classroom_id',
         'semester_id',
@@ -27,6 +25,7 @@ class Enrollment extends Model
         'progress',
         'approved_at',
         'rejected_at',
+        'rejection_reason',
         'current_step',
     ];
 
@@ -55,5 +54,26 @@ class Enrollment extends Model
     public function semester()
     {
         return $this->belongsTo(Semester::class);
+    }
+
+    public function payments()
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function validatedPayments()
+    {
+        return $this->payments()->where('status', Payment::STATUS_VALIDATED);
+    }
+
+    /** Requisito para aprobar la matrícula: al menos un pago validado. */
+    public function hasValidatedPayment(): bool
+    {
+        return $this->validatedPayments()->exists();
+    }
+
+    public function validatedPaymentsTotal(): float
+    {
+        return (float) $this->validatedPayments()->sum('amount');
     }
 }

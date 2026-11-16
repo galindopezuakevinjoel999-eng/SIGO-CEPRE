@@ -13,6 +13,8 @@ use App\Models\Payment;
 use App\Models\Grade;
 use App\Models\Attendance;
 use App\Models\SystemNotification;
+use App\Models\Semester;
+use App\Models\SystemSetting;
 
 class User extends Authenticatable
 {
@@ -135,20 +137,52 @@ class User extends Authenticatable
         return $this->hasMany(SystemNotification::class, 'user_id');
     }
 
+    /** Faltas del estudiante en los horarios del semestre activo (0 si no hay semestre activo). */
+    public function currentSemesterAbsences(): int
+    {
+        $semester = Semester::current();
+
+        if (! $semester) {
+            return 0;
+        }
+
+        return $this->attendances()
+            ->where('status', 'absent')
+            ->whereHas('schedule', fn ($q) => $q->where('semester_id', $semester->id))
+            ->count();
+    }
+
+    /** Faltas para pasar a "en_riesgo" si no está en system_settings (absence_warning_1). */
+    public const DEFAULT_ABSENCE_WARNING = 5;
+
+    /** Faltas para pasar a "inhabilitado" si no está en system_settings (max_absences). */
+    public const DEFAULT_MAX_ABSENCES = 10;
+
+    /**
+     * Recalcula las faltas y el estatus del estudiante (RF35–RF37):
+     *  - faltas ≥ max_absences      → inhabilitado (no puede iniciar sesión)
+     *  - faltas ≥ absence_warning_1 → en_riesgo
+     *  - en otro caso               → activo
+     * Si el estatus cambia, se le notifica.
+     *
+     * Solo cuentan las faltas del semestre activo (attendance → schedule →
+     * semester): cada semestre empieza de cero. Las de semestres anteriores
+     * quedan como historial. Ver Semester::activate().
+     */
     public function refreshAttendanceStatus(): void
     {
-        $absences = $this->attendances()->where('status', 'absent')->count();
+        $absences = $this->currentSemesterAbsences();
         $previousStatus = $this->student_status;
 
-        $this->absence_count = $absences;
+        $warning = (int) SystemSetting::getValue('absence_warning_1', self::DEFAULT_ABSENCE_WARNING);
+        $max = (int) SystemSetting::getValue('max_absences', self::DEFAULT_MAX_ABSENCES);
 
-        if ($absences >= 10) {
-            $this->student_status = 'inhabilitado';
-        } elseif ($absences >= 5) {
-            $this->student_status = 'en_riesgo';
-        } else {
-            $this->student_status = 'activo';
-        }
+        $this->absence_count = $absences;
+        $this->student_status = match (true) {
+            $absences >= $max => 'inhabilitado',
+            $absences >= $warning => 'en_riesgo',
+            default => 'activo',
+        };
 
         $this->save();
 
@@ -156,7 +190,7 @@ class User extends Authenticatable
             SystemNotification::create([
                 'user_id' => $this->id,
                 'type' => 'attendance_status',
-                'title' => 'Cambios en tu estatus académico',
+                'title' => 'Tu estatus académico ha cambiado',
                 'message' => "Tu estatus ha cambiado a {$this->student_status} por {$this->absence_count} faltas.",
             ]);
         }

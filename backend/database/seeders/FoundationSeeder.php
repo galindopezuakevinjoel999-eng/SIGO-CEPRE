@@ -4,91 +4,127 @@ namespace Database\Seeders;
 
 use App\Models\Career;
 use App\Models\Classroom;
+use App\Models\Course;
 use App\Models\Semester;
 use App\Models\SystemSetting;
-use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
+/**
+ * Catálogo base del CEPRE UNAJMA: carreras, aulas, semestre activo,
+ * configuración y cursos. Corre en cualquier entorno y se puede ejecutar
+ * varias veces sin duplicar datos.
+ *
+ * Los datos de prueba (usuarios, costo de matrícula, horarios) están en DemoSeeder.
+ */
 class FoundationSeeder extends Seeder
 {
+    public const ACTIVE_SEMESTER_CODE = '262';
+
+    /** [código, nombre, grupo]. Grupos: ver Career::GROUPS. */
+    public const CAREERS = [
+        // A — Ingenierías
+        ['SIS', 'Ingeniería de Sistemas', 'A'],
+        ['AMB', 'Ingeniería Ambiental', 'A'],
+        ['AGR', 'Ingeniería Agroindustrial', 'A'],
+        ['CIV', 'Ingeniería Civil', 'A'],
+        // B — Salud
+        ['PSI', 'Psicología', 'B'],
+        ['ENF', 'Enfermería', 'B'],
+        // C — Ciencias de la empresa
+        ['ADM', 'Administración de Empresas', 'C'],
+        ['EPI', 'Educación Primaria Intercultural', 'C'],
+        ['CON', 'Contabilidad', 'C'],
+        ['MEA', 'Matemáticas y Estadística Aplicadas', 'C'],
+    ];
+
+    /** Carreras de ejemplo de versiones anteriores del seeder. */
+    public const LEGACY_CAREERS = ['ING', 'EDU'];
+
+    /** [código, nombre] de los cursos comunes del ciclo CEPRE. */
+    public const COURSES = [
+        ['RV', 'Razonamiento Verbal'],
+        ['RM', 'Razonamiento Matemático'],
+        ['ARI', 'Aritmética'],
+        ['ALG', 'Álgebra'],
+        ['GEOM', 'Geometría'],
+        ['TRI', 'Trigonometría'],
+        ['FIS', 'Física'],
+        ['QUI', 'Química'],
+        ['BIO', 'Biología'],
+        ['LEN', 'Lenguaje'],
+        ['HIS', 'Historia'],
+        ['GEOG', 'Geografía'],
+    ];
+
     public function run(): void
     {
-        // ── Carreras de ejemplo (el admin las configura desde la UI) ──
-        $careers = [
-            ['code' => 'ING', 'name' => 'Ingeniería de Sistemas', 'group' => 'A'],
-            ['code' => 'EDU', 'name' => 'Educación', 'group' => 'B'],
-            ['code' => 'ADM', 'name' => 'Administración de Empresas', 'group' => 'B'],
-            ['code' => 'CON', 'name' => 'Contabilidad', 'group' => 'B'],
-        ];
+        $this->seedCareers();
+        $this->seedClassrooms();
+        $semester = $this->seedSemester();
+        $this->seedSettings();
+        $this->seedCourses($semester);
+    }
 
-        foreach ($careers as $career) {
-            Career::firstOrCreate(['code' => $career['code']], $career);
+    private function seedCareers(): void
+    {
+        foreach (self::CAREERS as [$code, $name, $group]) {
+            // updateOrCreate: corrige el grupo de carreras que ya existían (p. ej. ADM y CON eran B).
+            Career::updateOrCreate(['code' => $code], ['name' => $name, 'group' => $group, 'status' => 'active']);
         }
 
-        // ── Aulas de ejemplo ──
+        // Sus matrículas y cursos quedan con career_id en null (nullOnDelete).
+        Career::whereIn('code', self::LEGACY_CAREERS)->delete();
+    }
+
+    private function seedClassrooms(): void
+    {
         for ($i = 1; $i <= 6; $i++) {
-            Classroom::firstOrCreate(
-                ['number' => str_pad($i, 2, '0', STR_PAD_LEFT)],
-                ['name' => "Aula $i", 'capacity' => 30]
-            );
+            $number = str_pad((string) $i, 2, '0', STR_PAD_LEFT);
+            Classroom::firstOrCreate(['number' => $number], ['name' => "Aula {$number}", 'capacity' => 40]);
         }
+    }
 
-        // ── Semestre actual ──
-        Semester::firstOrCreate(
-            ['code' => '252'],
-            [
-                'year' => 2025,
-                'cycle' => 2,
-                'name' => '2025-II',
-                'is_active' => true,
-            ]
+    private function seedSemester(): Semester
+    {
+        $semester = Semester::updateOrCreate(
+            ['code' => self::ACTIVE_SEMESTER_CODE],
+            ['year' => 2026, 'cycle' => 2, 'name' => '2026-II'],
         );
 
-        // ── Configuración del sistema ──
+        // Único activo. Si ya lo era, no reinicia las faltas del ciclo en curso.
+        $semester->activate();
+
+        return $semester;
+    }
+
+    private function seedSettings(): void
+    {
         $settings = [
             ['key' => 'max_absences', 'value' => '10', 'type' => 'integer', 'description' => 'Máximo de faltas antes de inhabilitación'],
-            ['key' => 'absence_warning_1', 'value' => '5', 'type' => 'integer', 'description' => 'Primera alerta de faltas'],
+            ['key' => 'absence_warning_1', 'value' => '5', 'type' => 'integer', 'description' => 'Primera alerta de faltas (pasa a "en riesgo")'],
             ['key' => 'absence_warning_2', 'value' => '8', 'type' => 'integer', 'description' => 'Segunda alerta de faltas (incluye coordinador)'],
             ['key' => 'institution_name', 'value' => 'CEPRE UNAJMA', 'type' => 'string', 'description' => 'Nombre de la institución'],
             ['key' => 'institution_full_name', 'value' => 'Centro Pre Universitario - Universidad Nacional José María Arguedas', 'type' => 'string', 'description' => 'Nombre completo de la institución'],
+            // Sin valor fuera de local: el sistema no acepta pagos hasta que el
+            // administrador configure el costo real. DemoSeeder pone valores de prueba.
+            ['key' => 'enrollment_cost', 'value' => null, 'type' => 'decimal', 'description' => 'Costo total de la matrícula (S/)'],
+            ['key' => 'enrollment_installments', 'value' => '1', 'type' => 'integer', 'description' => 'Número de cuotas en que se puede pagar la matrícula'],
         ];
 
+        // firstOrCreate: no pisa lo que el administrador ya configuró.
         foreach ($settings as $setting) {
             SystemSetting::firstOrCreate(['key' => $setting['key']], $setting);
         }
+    }
 
-        // ── Usuario admin de prueba (si no existe) ──
-        User::firstOrCreate(
-            ['email' => 'admin@cepre.edu.pe'],
-            [
-                'name' => 'Administrador CEPRE',
-                'password' => Hash::make('admin123'),
-                'role' => User::ROLE_ADMIN,
-                'profile_completed' => true,
-            ]
-        );
-
-        // ── Usuario coordinador de prueba ──
-        User::firstOrCreate(
-            ['email' => 'coordinador@cepre.edu.pe'],
-            [
-                'name' => 'Coordinador CEPRE',
-                'password' => Hash::make('coord123'),
-                'role' => User::ROLE_COORDINADOR,
-                'profile_completed' => true,
-            ]
-        );
-
-        // ── Usuario docente de prueba ──
-        User::firstOrCreate(
-            ['email' => 'docente@cepre.edu.pe'],
-            [
-                'name' => 'Docente CEPRE',
-                'password' => Hash::make('docente123'),
-                'role' => User::ROLE_DOCENTE,
-                'profile_completed' => true,
-            ]
-        );
+    private function seedCourses(Semester $semester): void
+    {
+        foreach (self::COURSES as [$code, $name]) {
+            // Cursos comunes a todas las carreras: sin career_id.
+            Course::updateOrCreate(
+                ['code' => $code],
+                ['name' => $name, 'semester_id' => $semester->id, 'status' => 'active'],
+            );
+        }
     }
 }

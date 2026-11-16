@@ -2,63 +2,64 @@
 
 namespace App\Services;
 
+use App\Exceptions\EnrollmentCodeException;
 use App\Models\Career;
 use App\Models\Classroom;
 use App\Models\Enrollment;
 use App\Models\Semester;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * Código de matrícula: [GRUPO]-[CARRERA]-[AULA]-[SEMESTRE]-[CORRELATIVO]
+ * Ejemplo: A-SIS-01-262-001 (grupo A, Ing. de Sistemas, aula 01, semestre 2026-II, nº 1).
+ *
+ * El correlativo es independiente para cada combinación de grupo, carrera, aula
+ * y semestre. Es compatible con MySQL y SQLite: el máximo se calcula en PHP, sin
+ * funciones propias de un motor (como SUBSTRING_INDEX).
+ */
 class EnrollmentCodeService
 {
     /**
-     * Genera un código de matrícula único con el formato:
-     * [GRUPO]-[CARRERA]-[AULA]-[SEMESTRE]-[NÚMERO]
-     * Ejemplo: A-ING-01-252-001
+     * Asigna el código, el grupo y el semestre a la matrícula, sin guardarla.
+     *
+     * Debe llamarse dentro de una transacción (DB::transaction): así el bloqueo
+     * de lockForUpdate dura hasta el commit y el código se guarda junto con la
+     * aprobación y su auditoría. El índice único de enrollment_code impide
+     * duplicados aunque dos aprobaciones coincidan.
+     *
+     * @throws EnrollmentCodeException si falta la carrera, el aula o un semestre activo.
      */
-    public function generate(Enrollment $enrollment): string
+    public function assign(Enrollment $enrollment): string
     {
-        return DB::transaction(function () use ($enrollment) {
-            $career = Career::findOrFail($enrollment->career_id);
-            $classroom = Classroom::findOrFail($enrollment->classroom_id);
-            $semester = $enrollment->semester_id
-                ? Semester::findOrFail($enrollment->semester_id)
-                : Semester::current();
+        $career = Career::find($enrollment->career_id)
+            ?? throw new EnrollmentCodeException('La matrícula no tiene carrera asignada.');
+        $classroom = Classroom::find($enrollment->classroom_id)
+            ?? throw new EnrollmentCodeException('Asigna un aula para generar el código de matrícula.');
+        $semester = ($enrollment->semester_id ? Semester::find($enrollment->semester_id) : Semester::current())
+            ?? throw new EnrollmentCodeException('No hay un semestre activo configurado.');
 
-            if (! $semester) {
-                throw new \RuntimeException('No hay semestre activo configurado.');
-            }
+        $prefix = implode('-', [
+            strtoupper($career->group),
+            strtoupper($career->code),
+            str_pad($classroom->number, 2, '0', STR_PAD_LEFT),
+            $semester->code,
+        ]).'-';
 
-            $group = $career->group;  // A o B
-            $careerCode = strtoupper($career->code);
-            $classroomNumber = str_pad($classroom->number, 2, '0', STR_PAD_LEFT);
-            $semesterCode = $semester->code;
+        $code = $prefix.str_pad((string) ($this->lastNumber($prefix) + 1), 3, '0', STR_PAD_LEFT);
 
-            // Obtener el siguiente número correlativo (con lock para evitar duplicados)
-            $lastEnrollment = Enrollment::where('enrollment_code', 'LIKE', "{$group}-{$careerCode}-{$classroomNumber}-{$semesterCode}-%")
-                ->lockForUpdate()
-                ->orderByRaw('CAST(SUBSTRING_INDEX(enrollment_code, "-", -1) AS UNSIGNED) DESC')
-                ->first();
+        $enrollment->enrollment_code = $code;
+        $enrollment->group = $career->group;
+        $enrollment->semester_id ??= $semester->id;
 
-            $nextNumber = 1;
-            if ($lastEnrollment && $lastEnrollment->enrollment_code) {
-                $parts = explode('-', $lastEnrollment->enrollment_code);
-                $lastNumber = (int) end($parts);
-                $nextNumber = $lastNumber + 1;
-            }
+        return $code;
+    }
 
-            $numberPadded = str_pad($nextNumber, 3, '0', STR_PAD_LEFT);
-
-            $code = "{$group}-{$careerCode}-{$classroomNumber}-{$semesterCode}-{$numberPadded}";
-
-            // Guardar en la matrícula
-            $enrollment->enrollment_code = $code;
-            $enrollment->group = $group;
-            if (! $enrollment->semester_id) {
-                $enrollment->semester_id = $semester->id;
-            }
-            $enrollment->save();
-
-            return $code;
-        });
+    /** Mayor correlativo ya usado con ese prefijo (0 si no hay ninguno). */
+    private function lastNumber(string $prefix): int
+    {
+        return (int) Enrollment::where('enrollment_code', 'like', $prefix.'%')
+            ->lockForUpdate()
+            ->pluck('enrollment_code')
+            ->map(fn (string $code) => (int) substr($code, strlen($prefix)))
+            ->max();
     }
 }
