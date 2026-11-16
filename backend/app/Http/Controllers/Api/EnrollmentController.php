@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\EnrollmentCodeException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Enrollment\StoreEnrollmentRequest;
 use App\Http\Requests\Enrollment\UpdateEnrollmentRequest;
@@ -99,62 +100,68 @@ class EnrollmentController extends Controller
     /**
      * Aprobar o rechazar matrícula (admin o coordinador). Aprobar exige un pago
      * validado (UpdateEnrollmentStatusRequest). Con carrera y aula asignadas,
-     * genera el código de matrícula. Cada decisión queda en audit_logs.
+     * genera el código de matrícula.
+     *
+     * El cambio de estado, el código y el registro en audit_logs se guardan en
+     * una sola transacción: si algo falla, no queda nada a medias.
      */
-    public function updateStatus(UpdateEnrollmentStatusRequest $request, Enrollment $enrollment, AuditLogger $audit)
-    {
+    public function updateStatus(
+        UpdateEnrollmentStatusRequest $request,
+        Enrollment $enrollment,
+        AuditLogger $audit,
+        EnrollmentCodeService $codes,
+    ) {
         $data = $request->validated();
         $previousStatus = $enrollment->status;
 
-        $enrollment->status = $data['status'];
+        try {
+            DB::transaction(function () use ($enrollment, $data, $previousStatus, $audit, $codes, $request) {
+                $enrollment->status = $data['status'];
 
-        // El administrador asigna el aula al aprobar (necesaria para el código de matrícula).
-        if (! empty($data['classroom_id'])) {
-            $enrollment->classroom_id = $data['classroom_id'];
-        }
-
-        if ($data['status'] === 'approved') {
-            $enrollment->approved_at = now();
-            $enrollment->rejected_at = null;
-
-            // Generar código de matrícula si tiene carrera y aula asignada
-            if ($enrollment->career_id && $enrollment->classroom_id && ! $enrollment->enrollment_code) {
-                try {
-                    $codeService = new EnrollmentCodeService();
-                    $codeService->generate($enrollment);
-                } catch (\Exception $e) {
-                    return response()->json([
-                        'message' => 'Matrícula aprobada pero no se pudo generar el código: '.$e->getMessage(),
-                    ], 500);
+                // El administrador asigna el aula al aprobar (necesaria para el código de matrícula).
+                if (! empty($data['classroom_id'])) {
+                    $enrollment->classroom_id = $data['classroom_id'];
                 }
-            }
+
+                if ($data['status'] === 'approved') {
+                    $enrollment->approved_at = now();
+                    $enrollment->rejected_at = null;
+
+                    if ($enrollment->career_id && $enrollment->classroom_id && ! $enrollment->enrollment_code) {
+                        $codes->assign($enrollment);
+                    }
+                }
+
+                if ($data['status'] === 'rejected') {
+                    $enrollment->rejected_at = now();
+                    $enrollment->approved_at = null;
+                    $enrollment->rejection_reason = $data['rejection_reason'];
+                }
+
+                $enrollment->save();
+
+                $audit->record(
+                    $request->user(),
+                    $enrollment->student_id,
+                    match ($data['status']) {
+                        'approved' => AuditLogger::ENROLLMENT_APPROVED,
+                        'rejected' => AuditLogger::ENROLLMENT_REJECTED,
+                        default => AuditLogger::ENROLLMENT_REOPENED,
+                    },
+                    $data['rejection_reason'] ?? null,
+                    array_filter([
+                        'enrollment_id' => $enrollment->id,
+                        'previous_status' => $previousStatus,
+                        'new_status' => $data['status'],
+                        'enrollment_code' => $enrollment->enrollment_code,
+                    ]),
+                );
+            });
+        } catch (EnrollmentCodeException $e) {
+            return response()->json([
+                'message' => 'No se pudo aprobar la matrícula: '.$e->getMessage(),
+            ], 422);
         }
-
-        if ($data['status'] === 'rejected') {
-            $enrollment->rejected_at = now();
-            $enrollment->approved_at = null;
-            $enrollment->rejection_reason = $data['rejection_reason'];
-        }
-
-        DB::transaction(function () use ($enrollment, $audit, $request, $data, $previousStatus) {
-            $enrollment->save();
-
-            $audit->record(
-                $request->user(),
-                $enrollment->student_id,
-                match ($data['status']) {
-                    'approved' => AuditLogger::ENROLLMENT_APPROVED,
-                    'rejected' => AuditLogger::ENROLLMENT_REJECTED,
-                    default => AuditLogger::ENROLLMENT_REOPENED,
-                },
-                $data['rejection_reason'] ?? null,
-                [
-                    'enrollment_id' => $enrollment->id,
-                    'previous_status' => $previousStatus,
-                    'new_status' => $data['status'],
-                ],
-            );
-        });
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester', 'student']));
     }

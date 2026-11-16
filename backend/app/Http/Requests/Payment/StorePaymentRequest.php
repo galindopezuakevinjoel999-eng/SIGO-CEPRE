@@ -57,13 +57,15 @@ class StorePaymentRequest extends FormRequest
                     return;
                 }
 
-                $balance = $payments->outstandingBalance(Enrollment::find($this->input('enrollment_id')));
+                $enrollment = Enrollment::find($this->input('enrollment_id'));
 
-                if ($balance <= 0) {
+                if ($payments->outstandingBalance($enrollment) <= 0) {
                     $validator->errors()->add('enrollment_id', 'Esta matrícula ya está pagada por completo.');
-                } elseif ((float) $this->input('amount') > $balance) {
-                    $validator->errors()->add('amount', 'El monto supera el saldo pendiente (S/ '.number_format($balance, 2).').');
+
+                    return;
                 }
+
+                OverpaymentCheck::apply($validator, $payments->availableToRegister($enrollment), (float) $this->input('amount'));
             },
         ];
     }

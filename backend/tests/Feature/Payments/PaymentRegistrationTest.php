@@ -112,10 +112,12 @@ class PaymentRegistrationTest extends TestCase
         Payment::factory()->for($this->student, 'student')->for($this->enrollment)->create(['amount' => 100]);  // pendiente: no cuenta
         Payment::factory()->rejected()->for($this->student, 'student')->for($this->enrollment)->create(['amount' => 80]); // rechazado: no cuenta
 
-        $this->pay(['amount' => 350])
+        // El saldo (deuda real) solo descuenta lo validado: 500 − 150 = 350.
+        // Lo que se puede registrar descuenta además lo pendiente: 350 − 100 = 250.
+        $this->pay(['amount' => 250])
             ->assertCreated()
-            ->assertJsonPath('balance', 350)   // 500 − 150
-            ->assertJsonPath('partial', false); // 350 cubre todo el saldo
+            ->assertJsonPath('balance', 350)
+            ->assertJsonPath('partial', true); // 250 < 350
     }
 
     public function test_el_monto_no_puede_superar_el_saldo(): void
@@ -124,7 +126,7 @@ class PaymentRegistrationTest extends TestCase
 
         $this->pay(['amount' => 150])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors(['amount' => 'El monto supera el saldo pendiente (S/ 100.00).']);
+            ->assertJsonValidationErrors(['amount' => 'El monto supera lo que falta pagar (S/ 100.00), considerando tus pagos pendientes de validación.']);
     }
 
     public function test_no_se_paga_una_matricula_ya_pagada(): void

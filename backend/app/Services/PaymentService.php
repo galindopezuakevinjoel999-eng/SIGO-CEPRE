@@ -41,10 +41,32 @@ class PaymentService
         return max(1, (int) SystemSetting::getValue(self::INSTALLMENTS_SETTING, 1));
     }
 
-    /** Lo que falta pagar: costo − pagos validados (nunca negativo). */
-    public function outstandingBalance(Enrollment $enrollment): float
+    /**
+     * Saldo real: costo − pagos validados (nunca negativo).
+     * Con $except, ese pago no se cuenta (para revisar un pago que ya estaba validado).
+     */
+    public function outstandingBalance(Enrollment $enrollment, ?Payment $except = null): float
     {
-        return max(0, round($this->enrollmentCost() - $enrollment->validatedPaymentsTotal(), 2));
+        $validated = (float) $enrollment->validatedPayments()
+            ->when($except, fn ($q) => $q->whereKeyNot($except->getKey()))
+            ->sum('amount');
+
+        return max(0, round($this->enrollmentCost() - $validated, 2));
+    }
+
+    /**
+     * Cuánto se puede registrar todavía: costo − validados − pendientes.
+     * Evita sobrepagos con varios pagos pendientes a la vez. Con $except, ese
+     * pago no se cuenta (para corregir el monto de un pago pendiente).
+     */
+    public function availableToRegister(Enrollment $enrollment, ?Payment $except = null): float
+    {
+        $pending = (float) $enrollment->payments()
+            ->where('status', Payment::STATUS_PENDING)
+            ->when($except, fn ($q) => $q->whereKeyNot($except->getKey()))
+            ->sum('amount');
+
+        return max(0, round($this->outstandingBalance($enrollment) - $pending, 2));
     }
 
     /**
