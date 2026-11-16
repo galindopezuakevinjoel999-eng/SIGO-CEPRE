@@ -25,7 +25,9 @@ use App\Http\Controllers\Api\UserController;
 Route::prefix('auth')->group(function () {
     Route::get('/google', [GoogleAuthController::class, 'redirect']);
     Route::get('/google/callback', [GoogleAuthController::class, 'callback']);
-    Route::post('/login', [AuthController::class, 'login']);
+    // Límite de intentos por minuto contra fuerza bruta.
+    Route::post('/google/exchange', [GoogleAuthController::class, 'exchange'])->middleware('throttle:10,1');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 
 Route::get('/news', [NewsController::class, 'publicIndex']);

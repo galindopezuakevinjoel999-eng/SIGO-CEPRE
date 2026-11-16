@@ -15,7 +15,7 @@ class EnsureRole
     {
         $user = $request->user();
 
-        if (! $user || ! in_array($user->role, $roles)) {
+        if (! $user || ! in_array($user->role, $roles, true)) {
             return response()->json([
                 'message' => 'Acceso denegado. Se requiere uno de los roles: '.implode(', ', $roles),
             ], 403);
