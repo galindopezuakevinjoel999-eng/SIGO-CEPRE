@@ -70,6 +70,10 @@ return [
 
     'timezone' => 'UTC',
 
+    // Zona horaria para mostrar fechas a las personas (reportes PDF/Excel).
+    // Los datos se siguen guardando en "timezone" (UTC).
+    'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'America/Lima'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

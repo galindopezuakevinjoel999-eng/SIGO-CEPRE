@@ -23,7 +23,7 @@ use App\Http\Controllers\Admin\Content\NewsController as AdminNewsController;
 use App\Http\Controllers\Admin\Content\AnnouncementController as AdminAnnouncementController;
 use App\Http\Controllers\Admin\Content\FaqController as AdminFaqController;
 use App\Http\Controllers\Admin\Content\HomeBlockController as AdminHomeBlockController;
-use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Api\UserController;
 
 Route::prefix('auth')->group(function () {
@@ -94,7 +94,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('faqs', AdminFaqController::class)->parameters(['faqs' => 'id']);
         Route::apiResource('home-blocks', AdminHomeBlockController::class)->parameters(['home-blocks' => 'id']);
     });
-    Route::apiResource('reports', ReportController::class);
+    // Dashboard, reportes (?format=json|pdf|xlsx) e indicadores de la tesis (?format=json|xlsx).
+    // Filtros: semester_id (por defecto el activo), career_id, group, classroom_id.
+    Route::prefix('admin')->name('admin.')->group(function () {
+        Route::get('/dashboard', [ReportController::class, 'dashboard'])->name('dashboard');
+        Route::get('/reports/{type}', [ReportController::class, 'report'])->name('reports');
+        Route::get('/research-indicators', [ReportController::class, 'researchIndicators'])->name('research-indicators');
+    });
     Route::apiResource('users', UserController::class);
 
     Route::get('/notifications', [NotificationController::class, 'index']);
