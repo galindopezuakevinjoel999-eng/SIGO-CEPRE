@@ -1,0 +1,30 @@
+# Finales de línea: LF en el repositorio y en el disco, en cualquier sistema.
+# Evita que Windows (core.autocrlf) marque archivos como modificados
+# solo por convertir LF ↔ CRLF.
+* text=auto eol=lf
+
+# Scripts de Windows: necesitan CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binarios: sin conversión ni diff de texto.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.docx  binary
+*.xlsx  binary
+*.pptx  binary
+*.zip   binary
+*.gz    binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.eot   binary
+*.mp4   binary
+*.mp3   binary
