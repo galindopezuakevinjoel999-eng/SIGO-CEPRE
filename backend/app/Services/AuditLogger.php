@@ -25,6 +25,8 @@ class AuditLogger
 
     public const EXAM_PUBLISHED = 'exam_published';
 
+    public const CERTIFICATE_DELIVERED = 'certificate_delivered';
+
     /**
      * @param  ?int  $subjectUserId  estudiante afectado; null cuando la acción afecta a
      *                               muchos (importar o publicar un examen): el detalle va en metadata.

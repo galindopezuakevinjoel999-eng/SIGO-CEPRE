@@ -30,9 +30,24 @@ class ReportQueries
 {
     public function __construct(private PaymentService $payments) {}
 
-    public function enrollmentCost(): ?float
+    /**
+     * Modalidades de pago del semestre (vacío si no hay montos configurados).
+     *
+     * @return array<string, array{label: string, installments: list<float>, total: float}>
+     */
+    public function paymentPlans(ReportFilters $filters): array
     {
-        return $this->payments->enrollmentCost();
+        return $this->payments->plansFor($filters->semester);
+    }
+
+    /** "Pago único S/ 600.00 · Pago fraccionado S/ 650.00 (500.00 + 150.00)" */
+    public function paymentPlansLabel(ReportFilters $filters): ?string
+    {
+        $plans = $this->paymentPlans($filters);
+
+        return $plans ? collect($plans)->map(fn ($p) => $p['label'].' '.self::money($p['total'])
+            .(count($p['installments']) > 1 ? ' ('.implode(' + ', array_map(fn ($a) => number_format($a, 2), $p['installments'])).')' : ''))
+            ->implode(' · ') : null;
     }
 
     /** Pagos de las matrículas que cumplen los filtros. */
@@ -42,14 +57,13 @@ class ReportQueries
     }
 
     /**
-     * Situación de pago de cada matrícula no rechazada.
+     * Situación de pago de cada matrícula no rechazada. El costo es el de la
+     * modalidad elegida (o el más bajo si aún no elige).
      *
-     * @return Collection<int, array{enrollment: Enrollment, validated: float, pending: float, balance: ?float, status: string}>
+     * @return Collection<int, array{enrollment: Enrollment, cost: ?float, validated: float, pending: float, balance: ?float, status: string}>
      */
     public function paymentStatusByEnrollment(ReportFilters $filters): Collection
     {
-        $cost = $this->enrollmentCost();
-
         $enrollments = $filters->enrollments()
             ->where('status', '!=', 'rejected')
             ->with(['student:id,name,dni', 'career:id,code,name,group', 'classroom:id,number,name'])
@@ -58,12 +72,15 @@ class ReportQueries
             ->orderBy('id')
             ->get();
 
-        return $enrollments->map(function (Enrollment $enrollment) use ($cost) {
+        return $enrollments->map(function (Enrollment $enrollment) use ($filters) {
+            $enrollment->setRelation('semester', $filters->semester);
+            $cost = $this->payments->costFor($enrollment);
             $validated = round((float) $enrollment->validated_total, 2);
             $balance = $cost === null ? null : max(0, round($cost - $validated, 2));
 
             return [
                 'enrollment' => $enrollment,
+                'cost' => $cost,
                 'validated' => $validated,
                 'pending' => round((float) $enrollment->pending_total, 2),
                 'balance' => $balance,

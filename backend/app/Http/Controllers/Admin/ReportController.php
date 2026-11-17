@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Exam;
 use App\Reports\AcademicReport;
+use App\Reports\AdmissionReport;
 use App\Reports\AttendanceReport;
 use App\Reports\DashboardMetrics;
 use App\Reports\EnrollmentReport;
@@ -21,7 +23,7 @@ use Illuminate\Validation\Rule;
  */
 class ReportController extends Controller
 {
-    public const TYPES = ['matricula', 'pagos', 'academico', 'asistencia'];
+    public const TYPES = ['matricula', 'pagos', 'academico', 'asistencia', 'ingresantes'];
 
     public function __construct(private ReportRenderer $renderer) {}
 
@@ -42,8 +44,11 @@ class ReportController extends Controller
         $data = $request->validate([
             'type' => [Rule::in(self::TYPES)],
             'format' => ['sometimes', Rule::in(ReportRenderer::FORMATS)],
-            'exam_id' => ['sometimes', 'integer', 'exists:exams,id'],
-        ], ['type.in' => 'Tipo de reporte desconocido. Usa: '.implode(', ', self::TYPES).'.']);
+            'exam_id' => [$type === 'ingresantes' ? 'required' : 'sometimes', 'integer', 'exists:exams,id'],
+        ], [
+            'type.in' => 'Tipo de reporte desconocido. Usa: '.implode(', ', self::TYPES).'.',
+            'exam_id.required' => 'Indica el examen (exam_id) del que quieres los ingresantes.',
+        ]);
 
         $filters = ReportFilters::fromRequest($request);
 
@@ -52,6 +57,7 @@ class ReportController extends Controller
             'pagos' => app(PaymentReport::class)->build($filters),
             'academico' => app(AcademicReport::class)->build($filters, $data['exam_id'] ?? null),
             'asistencia' => app(AttendanceReport::class)->build($filters),
+            'ingresantes' => app(AdmissionReport::class)->build($filters, Exam::findOrFail($data['exam_id'])),
         };
 
         return $this->renderer->render($document, $data['format'] ?? 'json');

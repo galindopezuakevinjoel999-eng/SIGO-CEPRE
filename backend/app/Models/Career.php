@@ -32,6 +32,12 @@ class Career extends Model
         return $query->where('group', strtoupper($group));
     }
 
+    /** Ciclos en que se ofrece, con sus vacantes (pivot.vacancies). */
+    public function semesters()
+    {
+        return $this->belongsToMany(Semester::class)->withPivot('vacancies')->withTimestamps();
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 'active');

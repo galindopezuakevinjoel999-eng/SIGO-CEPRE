@@ -21,6 +21,7 @@ class EnrollmentSubmissionTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->openEnrollmentCycle();
 
         $this->student = User::factory()->student()->withCompletedProfile()->create();
         $this->enrollment = Enrollment::factory()->for($this->student, 'student')->create(['current_step' => 2]);
@@ -34,14 +35,14 @@ class EnrollmentSubmissionTest extends TestCase
     public function test_los_pasos_1_a_3_no_envian_la_matricula(): void
     {
         $this->step(2)->assertOk();
-        $this->step(3, ['documents' => [$this->fakePdf('dni.pdf')]])->assertOk();
+        $this->step(3, ['documents' => $this->requiredDocuments()])->assertOk();
 
         $this->assertNull($this->enrollment->fresh()->submitted_at);
     }
 
     public function test_confirmar_el_paso_4_registra_el_envio(): void
     {
-        $this->step(3, ['documents' => [$this->fakePdf('dni.pdf')]])->assertOk();
+        $this->step(3, ['documents' => $this->requiredDocuments()])->assertOk();
 
         $this->travelTo(Carbon::parse('2026-08-01 14:00:00'));
         $this->step(4)->assertOk();
@@ -51,13 +52,13 @@ class EnrollmentSubmissionTest extends TestCase
 
     public function test_corregir_despues_no_cambia_la_fecha_del_primer_envio(): void
     {
-        $this->step(3, ['documents' => [$this->fakePdf('dni.pdf')]])->assertOk();
+        $this->step(3, ['documents' => $this->requiredDocuments()])->assertOk();
         $this->travelTo(Carbon::parse('2026-08-01 14:00:00'));
         $this->step(4)->assertOk();
 
         // Vuelve a subir documentos y a confirmar al día siguiente (sigue pendiente).
         $this->travelTo(Carbon::parse('2026-08-02 09:00:00'));
-        $this->step(3, ['documents' => [$this->fakePdf('dni-corregido.pdf')]])->assertOk();
+        $this->step(3, ['documents' => ['dni' => $this->fakePdf('dni-corregido.pdf')]])->assertOk();
         $this->step(4)->assertOk();
 
         $this->assertSame('2026-08-01 14:00:00', $this->enrollment->fresh()->submitted_at->format('Y-m-d H:i:s'));
@@ -70,7 +71,7 @@ class EnrollmentSubmissionTest extends TestCase
         $id = $this->actingAs($other)->postJson('/api/enrollments', [
             'step' => 4,
             'career_id' => Career::factory()->create()->id,
-            'documents' => [$this->fakePdf('dni.pdf')],
+            'documents' => $this->requiredDocuments(),
         ])->assertCreated()->json('id');
 
         $this->assertNotNull(Enrollment::find($id)->submitted_at);

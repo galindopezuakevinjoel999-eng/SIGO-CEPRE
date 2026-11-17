@@ -25,11 +25,20 @@ class ExamRanking
             ->groupBy('group')
             ->each(fn (Collection $group) => $this->assign($group->values(), 'rank_in_group'));
 
+        // Puesto dentro de la carrera: base del cálculo de ingresantes.
+        $results->whereNotNull('career_id')
+            ->groupBy('career_id')
+            ->each(fn (Collection $career) => $this->assign($career->values(), 'rank_in_career'));
+
         // foreach y no each(): each() se detiene si la función devuelve false
         // (p. ej. isDirty() de un resultado cuyo puesto no cambió).
         foreach ($results as $result) {
             if ($result->group === null) {
                 $result->rank_in_group = null;
+            }
+
+            if ($result->career_id === null) {
+                $result->rank_in_career = null;
             }
 
             if ($result->isDirty()) {

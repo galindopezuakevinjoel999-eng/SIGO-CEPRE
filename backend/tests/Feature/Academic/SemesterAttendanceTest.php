@@ -36,7 +36,7 @@ class SemesterAttendanceTest extends TestCase
         $this->teacher = User::factory()->teacher()->create();
         $this->student = User::factory()->student()->create(['student_status' => 'activo']);
 
-        $this->semester2026II = Semester::factory()->active()->create(['code' => '262', 'year' => 2026, 'cycle' => 2, 'name' => '2026-II']);
+        $this->semester2026II = Semester::factory()->active()->create(['type' => 'ordinario_ii', 'code' => '262', 'year' => 2026, 'cycle' => 2, 'name' => 'Ciclo Ordinario II 2026']);
         $this->schedule2026II = Schedule::factory()->for($this->semester2026II)->create();
     }
 
@@ -66,7 +66,7 @@ class SemesterAttendanceTest extends TestCase
         $this->disableIn2026II();
 
         $this->actingAs($this->admin)
-            ->postJson('/api/semesters', ['code' => '271', 'year' => 2027, 'cycle' => 1, 'name' => '2027-I', 'is_active' => true])
+            ->postJson('/api/semesters', ['type' => 'ordinario_i', 'year' => 2027, 'is_active' => true])
             ->assertCreated()
             ->assertJsonPath('is_active', true);
 
@@ -81,7 +81,7 @@ class SemesterAttendanceTest extends TestCase
     {
         $this->disableIn2026II();
 
-        $semester2027I = Semester::factory()->create(['code' => '271', 'year' => 2027, 'cycle' => 1]);
+        $semester2027I = Semester::factory()->create(['type' => 'ordinario_i', 'code' => '271', 'year' => 2027, 'cycle' => 1]);
         $this->actingAs($this->admin)
             ->putJson("/api/semesters/{$semester2027I->id}", ['is_active' => true])
             ->assertOk();
@@ -95,7 +95,7 @@ class SemesterAttendanceTest extends TestCase
     {
         $this->disableIn2026II();
 
-        $semester2027I = Semester::factory()->create(['code' => '271', 'year' => 2027, 'cycle' => 1]);
+        $semester2027I = Semester::factory()->create(['type' => 'ordinario_i', 'code' => '271', 'year' => 2027, 'cycle' => 1]);
         $semester2027I->activate();
         $schedule2027I = Schedule::factory()->for($semester2027I)->create();
 
@@ -108,7 +108,7 @@ class SemesterAttendanceTest extends TestCase
 
     public function test_corregir_una_falta_antigua_no_afecta_el_semestre_actual(): void
     {
-        $old = Semester::factory()->create(['code' => '261', 'year' => 2026, 'cycle' => 1]);
+        $old = Semester::factory()->create(['type' => 'ordinario_i', 'code' => '261', 'year' => 2026, 'cycle' => 1]);
         $oldSchedule = Schedule::factory()->for($old)->create();
         // Fechas fijas (abril) para no chocar con la falta del 30 de mayo de abajo.
         Attendance::factory()->absent()->count(12)->for($this->student, 'student')->for($oldSchedule)
@@ -139,7 +139,7 @@ class SemesterAttendanceTest extends TestCase
     {
         $this->teacher->update(['student_status' => 'en_riesgo', 'absence_count' => 3]);
 
-        Semester::factory()->create(['code' => '271', 'year' => 2027, 'cycle' => 1])->activate();
+        Semester::factory()->create(['type' => 'ordinario_i', 'code' => '271', 'year' => 2027, 'cycle' => 1])->activate();
 
         $this->assertSame('en_riesgo', $this->teacher->fresh()->student_status);
     }

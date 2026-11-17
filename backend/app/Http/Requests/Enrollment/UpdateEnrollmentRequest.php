@@ -27,6 +27,11 @@ class UpdateEnrollmentRequest extends EnrollmentStepRequest
         return blank($this->enrollment()->{$field}) ? 'required' : 'sometimes';
     }
 
+    protected function hasStoredDocument(string $type): bool
+    {
+        return $this->enrollment()->hasDocument($type);
+    }
+
     private function enrollment(): Enrollment
     {
         return $this->route('enrollment');

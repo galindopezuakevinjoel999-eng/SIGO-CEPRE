@@ -14,6 +14,24 @@ class Enrollment extends Model
 {
     use HasFactory;
 
+    /**
+     * Documentos del paso 3 (requisitos del CEPRE UNAJMA).
+     * tipo => [etiqueta, extensiones permitidas, obligatorio]
+     */
+    public const DOCUMENT_TYPES = [
+        'recibo_pago' => ['label' => 'Recibo de pago', 'extensions' => ['jpg', 'jpeg', 'png', 'pdf'], 'required' => true],
+        'foto_postulante' => ['label' => 'Foto del postulante', 'extensions' => ['jpg', 'jpeg', 'png'], 'required' => true],
+        'dni' => ['label' => 'DNI', 'extensions' => ['pdf'], 'required' => true],
+        'certificado_estudios' => ['label' => 'Certificado de estudios', 'extensions' => ['pdf'], 'required' => false],
+    ];
+
+    /** Estado del certificado de estudios. */
+    public const CERTIFICATE_PENDING = 'pending';      // falta: "certificado pendiente de regularizar"
+
+    public const CERTIFICATE_UPLOADED = 'uploaded';    // el estudiante lo subió
+
+    public const CERTIFICATE_DELIVERED = 'delivered';  // la administración lo marcó como entregado
+
     protected $fillable = [
         'student_id',
         'career_id',
@@ -28,7 +46,10 @@ class Enrollment extends Model
         'rejected_at',
         'rejection_reason',
         'current_step',
-        // submitted_at no es asignable: lo fija el sistema al confirmar el paso 4.
+        // No asignables: los fija el sistema.
+        //  submitted_at       al confirmar el paso 4.
+        //  payment_modality   con el primer pago (PaymentService).
+        //  certificate_*      según los documentos y la administración.
     ];
 
     protected $casts = [
@@ -37,6 +58,7 @@ class Enrollment extends Model
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
         'submitted_at' => 'datetime',
+        'certificate_delivered_at' => 'datetime',
     ];
 
     /** Al eliminar la matrícula se borran sus documentos del disco privado. */
@@ -45,8 +67,24 @@ class Enrollment extends Model
         static::deleted(fn (Enrollment $enrollment) => app(PrivateFiles::class)->delete($enrollment->documentPaths()));
     }
 
+    /** @return array{id: string, type: string, name: string, path: string, mime: ?string, size: int}|null */
+    public function documentOfType(string $type): ?array
+    {
+        return collect($this->documents ?? [])->firstWhere('type', $type);
+    }
+
+    public function hasDocument(string $type): bool
+    {
+        return $this->documentOfType($type) !== null;
+    }
+
+    public function certificatePending(): bool
+    {
+        return $this->certificate_status === self::CERTIFICATE_PENDING;
+    }
+
     /**
-     * Documentos subidos en el paso 3: lista de {id, name, path, mime, size}.
+     * Documentos subidos en el paso 3: lista de {id, type, name, path, mime, size}.
      *
      * @return list<string>
      */

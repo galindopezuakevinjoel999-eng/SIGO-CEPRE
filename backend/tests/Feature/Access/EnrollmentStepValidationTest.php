@@ -18,6 +18,7 @@ class EnrollmentStepValidationTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->openEnrollmentCycle();
         $this->student = User::factory()->student()->withCompletedProfile()->create();
     }
 
@@ -52,7 +53,8 @@ class EnrollmentStepValidationTest extends TestCase
         $this->actingAs($this->student)
             ->postJson('/api/enrollments', ['step' => 3, 'career_id' => Career::factory()->create()->id])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('documents');
+            ->assertJsonValidationErrors(['documents.recibo_pago', 'documents.foto_postulante', 'documents.dni'])
+            ->assertJsonMissingValidationErrors('documents.certificado_estudios');
     }
 
     public function test_paso_4_valida_el_aula(): void
@@ -61,7 +63,7 @@ class EnrollmentStepValidationTest extends TestCase
             ->postJson('/api/enrollments', [
                 'step' => 4,
                 'career_id' => Career::factory()->create()->id,
-                'documents' => [$this->fakePdf('dni.pdf')],
+                'documents' => $this->requiredDocuments(),
                 'classroom_id' => 9999,
             ])
             ->assertUnprocessable()
@@ -94,7 +96,7 @@ class EnrollmentStepValidationTest extends TestCase
         $enrollment = Enrollment::factory()->for($this->student, 'student')->create(['current_step' => 2]);
 
         $this->actingAs($this->student)
-            ->putJson("/api/enrollments/{$enrollment->id}", ['step' => 3, 'documents' => [$this->fakePdf('dni.pdf')]])
+            ->putJson("/api/enrollments/{$enrollment->id}", ['step' => 3, 'documents' => $this->requiredDocuments()])
             ->assertOk()
             ->assertJsonPath('current_step', 3)
             ->assertJsonPath('career_id', $enrollment->career_id);
@@ -107,7 +109,7 @@ class EnrollmentStepValidationTest extends TestCase
         $this->actingAs($this->student)
             ->putJson("/api/enrollments/{$enrollment->id}", ['step' => 3])
             ->assertUnprocessable()
-            ->assertJsonValidationErrors('documents');
+            ->assertJsonValidationErrors(['documents.recibo_pago', 'documents.foto_postulante', 'documents.dni']);
     }
 
     public function test_no_se_puede_borrar_un_dato_ya_guardado_con_null(): void

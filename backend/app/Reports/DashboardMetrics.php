@@ -54,15 +54,15 @@ class DashboardMetrics
             'amount' => round((float) ($byStatus[$s]->amount ?? 0), 2),
         ];
 
-        $cost = $this->queries->enrollmentCost();
-        $debtors = $cost === null ? null : $this->queries->paymentStatusByEnrollment($filters)->where('balance', '>', 0);
+        $plans = $this->queries->paymentPlans($filters);
+        $debtors = $plans ? $this->queries->paymentStatusByEnrollment($filters)->where('balance', '>', 0) : null;
 
         return [
             'validated' => $status(Payment::STATUS_VALIDATED),
             'pending' => $status(Payment::STATUS_PENDING),
             'rejected' => $status(Payment::STATUS_REJECTED),
             'income' => $status(Payment::STATUS_VALIDATED)['amount'],
-            'enrollment_cost' => $cost,
+            'payment_plans' => $plans,
             // Sin costo configurado no se puede saber quién debe.
             'debtors' => $debtors === null ? null : [
                 'count' => $debtors->count(),

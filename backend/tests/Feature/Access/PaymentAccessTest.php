@@ -86,11 +86,11 @@ class PaymentAccessTest extends TestCase
     public function test_el_estudiante_corrige_su_pago_pendiente_pero_no_su_estado(): void
     {
         $this->actingAs($this->studentA)
-            ->putJson("/api/payments/{$this->paymentA->id}", ['amount' => 200, 'status' => Payment::STATUS_VALIDATED])
+            ->putJson("/api/payments/{$this->paymentA->id}", ['receipt_number' => 'rc 000777', 'status' => Payment::STATUS_VALIDATED])
             ->assertOk();
 
         $fresh = $this->paymentA->fresh();
-        $this->assertEquals(200, $fresh->amount);
+        $this->assertSame('RC000777', $fresh->receipt_number);
         $this->assertSame(Payment::STATUS_PENDING, $fresh->status);
     }
 
@@ -106,12 +106,13 @@ class PaymentAccessTest extends TestCase
         }
     }
 
-    public function test_el_monto_no_se_puede_vaciar(): void
+    public function test_el_monto_no_se_corrige_es_el_de_la_cuota(): void
     {
         $this->actingAs($this->studentA)
-            ->putJson("/api/payments/{$this->paymentA->id}", ['amount' => null])
-            ->assertUnprocessable()
-            ->assertJsonValidationErrors('amount');
+            ->putJson("/api/payments/{$this->paymentA->id}", ['amount' => 1])
+            ->assertOk();
+
+        $this->assertEquals(100, $this->paymentA->fresh()->amount);
     }
 
     public function test_el_admin_elimina_cualquier_pago(): void

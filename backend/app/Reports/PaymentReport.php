@@ -17,7 +17,7 @@ class PaymentReport
 
     public function build(ReportFilters $filters): ReportDocument
     {
-        $cost = $this->queries->enrollmentCost();
+        $plansLabel = $this->queries->paymentPlansLabel($filters);
         $situation = $this->queries->paymentStatusByEnrollment($filters);
 
         $validatedPayments = $this->queries->payments($filters)->where('status', Payment::STATUS_VALIDATED);
@@ -31,6 +31,8 @@ class PaymentReport
             'dni' => $s['enrollment']->student?->dni,
             'career' => $s['enrollment']->career?->name,
             'enrollment_status' => $s['enrollment']->status === 'approved' ? 'Aprobada' : 'Pendiente',
+            'modality' => $s['enrollment']->payment_modality ?? '(sin elegir)',
+            'cost' => $s['cost'],
             'validated' => $s['validated'],
             'pending' => $s['pending'],
             'balance' => $s['balance'],
@@ -39,28 +41,28 @@ class PaymentReport
 
         $debtors = array_values(array_filter($rows, fn ($r) => ($r['balance'] ?? 0) > 0));
 
-        $notes = $cost === null
-            ? ['El costo de matrícula (enrollment_cost) no está configurado: no se puede calcular saldos ni deudores.']
-            : ['Saldo = costo de matrícula ('.ReportQueries::money($cost).') − pagos validados. Los pagos pendientes no reducen el saldo hasta validarse.'];
+        $notes = $plansLabel === null
+            ? ['Los montos de pago del ciclo no están configurados: no se puede calcular saldos ni deudores.']
+            : ['Saldo = total de la modalidad elegida − pagos validados. Sin modalidad elegida se usa la de menor costo. Los pagos pendientes no reducen el saldo hasta validarse.'];
 
         return new ReportDocument(
             title: 'Reporte de pagos',
             filters: $filters->describe(),
             summary: [
                 'Ingresos (pagos validados)' => ReportQueries::money($income),
-                'Costo de matrícula' => ReportQueries::money($cost),
+                'Modalidades de pago' => $plansLabel,
                 'Matrículas al día (pagado)' => $situation->where('status', 'pagado')->count(),
                 'Matrículas con pago parcial' => $situation->where('status', 'parcial')->count(),
                 'Matrículas sin pago' => $situation->where('status', 'sin_pago')->count(),
-                'Deudores' => $cost === null ? null : count($debtors),
-                'Deuda total' => $cost === null ? null : ReportQueries::money(array_sum(array_column($debtors, 'balance'))),
+                'Deudores' => $plansLabel === null ? null : count($debtors),
+                'Deuda total' => $plansLabel === null ? null : ReportQueries::money(array_sum(array_column($debtors, 'balance'))),
                 'Pagos validados parciales (cuotas)' => $partialPayments,
                 'Pagos validados completos' => $completePayments,
             ],
             tables: [
                 new ReportTable('Situación de pago por matrícula', [
                     'code' => 'Código', 'student' => 'Estudiante', 'dni' => 'DNI', 'career' => 'Carrera',
-                    'enrollment_status' => 'Matrícula', 'validated' => 'Pagado (S/)', 'pending' => 'Por validar (S/)',
+                    'enrollment_status' => 'Matrícula', 'modality' => 'Modalidad', 'cost' => 'Total (S/)', 'validated' => 'Pagado (S/)', 'pending' => 'Por validar (S/)',
                     'balance' => 'Saldo (S/)', 'status' => 'Estado',
                 ], $rows),
                 new ReportTable('Deudores', [

@@ -28,4 +28,39 @@ abstract class TestCase extends BaseTestCase
     {
         return Storage::disk(PrivateFiles::DISK);
     }
+
+    /** Imagen JPG de prueba (sin GD: el contenido no importa para validar el tipo). */
+    protected function fakeImage(string $name = 'foto.jpg', int $kilobytes = 200): File
+    {
+        return UploadedFile::fake()->create($name, $kilobytes, str_ends_with($name, '.png') ? 'image/png' : 'image/jpeg');
+    }
+
+    /** Ciclo activo con la inscripción abierta hoy. */
+    protected function openEnrollmentCycle(array $attributes = []): \App\Models\Semester
+    {
+        return \App\Models\Semester::factory()->active()->enrollmentOpen()->create($attributes);
+    }
+
+    /**
+     * Documentos obligatorios del paso 3 (sin certificado de estudios).
+     *
+     * @return array<string, File>
+     */
+    protected function requiredDocuments(array $override = []): array
+    {
+        return [
+            'recibo_pago' => $this->fakePdf('recibo.pdf'),
+            'foto_postulante' => $this->fakeImage('foto.jpg'),
+            'dni' => $this->fakePdf('dni.pdf'),
+            ...$override,
+        ];
+    }
+
+    /** N° de recibo de caja distinto en cada llamada. */
+    protected function receiptNumber(): string
+    {
+        static $next = 0;
+
+        return sprintf('RC-%06d', ++$next);
+    }
 }

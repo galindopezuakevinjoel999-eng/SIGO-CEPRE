@@ -7,9 +7,7 @@ use App\Models\Classroom;
 use App\Models\Course;
 use App\Models\Schedule;
 use App\Models\Semester;
-use App\Models\SystemSetting;
 use App\Models\User;
-use App\Services\PaymentService;
 use Illuminate\Database\Seeder;
 
 /**
@@ -33,16 +31,8 @@ class DemoSeeder extends Seeder
             return;
         }
 
-        $this->seedTestSettings();
         $teachers = $this->seedUsers();
         $this->seedSchedules($teachers);
-    }
-
-    /** Valores de prueba: el costo real lo define la administración. */
-    private function seedTestSettings(): void
-    {
-        SystemSetting::setValue(PaymentService::COST_SETTING, '350', 'decimal', 'Costo total de la matrícula (S/) — valor de prueba');
-        SystemSetting::setValue(PaymentService::INSTALLMENTS_SETTING, '2', 'integer', 'Número de cuotas en que se puede pagar la matrícula — valor de prueba');
     }
 
     /** @return array{math: User, science: User} */

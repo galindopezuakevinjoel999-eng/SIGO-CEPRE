@@ -21,7 +21,9 @@ class DatabaseSeeder extends Seeder
         // sistema (MySQL) queda sembrado igual y se avisa cómo reintentarlo.
         // En las pruebas se omite: las de contenido llaman a ContentSeeder
         // directamente, y así las demás no dependen de Atlas.
-        if (! app()->runningUnitTests()) {
+        // runningUnitTests() mira solo si APP_ENV es "testing"; algunas pruebas
+        // simulan APP_ENV=local, así que también se detecta PHPUnit.
+        if (! app()->runningUnitTests() && ! defined('PHPUNIT_COMPOSER_INSTALL')) {
             try {
                 $this->call(ContentSeeder::class);
             } catch (ConnectionTimeoutException $e) {

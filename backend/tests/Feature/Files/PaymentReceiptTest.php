@@ -24,7 +24,9 @@ class PaymentReceiptTest extends TestCase
     {
         parent::setUp();
 
+        // Respaldo global: S/ 500 en 5 cuotas de S/ 100 (permite varios pagos por prueba).
         SystemSetting::setValue(PaymentService::COST_SETTING, 500, 'decimal');
+        SystemSetting::setValue(PaymentService::INSTALLMENTS_SETTING, 5, 'integer');
 
         $this->student = User::factory()->student()->withCompletedProfile()->create();
         $this->enrollment = Enrollment::factory()->for($this->student, 'student')->create();
@@ -35,6 +37,8 @@ class PaymentReceiptTest extends TestCase
         return $this->actingAs($this->student)->postJson('/api/payments', [
             'enrollment_id' => $this->enrollment->id,
             'amount' => 100,
+            'modality' => 'unico',
+            'receipt_number' => $this->receiptNumber(),
             'receipt' => $receipt,
         ]);
     }
@@ -64,7 +68,7 @@ class PaymentReceiptTest extends TestCase
     public function test_el_comprobante_es_obligatorio(): void
     {
         $this->actingAs($this->student)
-            ->postJson('/api/payments', ['enrollment_id' => $this->enrollment->id, 'amount' => 100])
+            ->postJson('/api/payments', ['enrollment_id' => $this->enrollment->id, 'amount' => 100, 'modality' => 'unico', 'receipt_number' => $this->receiptNumber()])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['receipt' => 'Adjunta el comprobante de pago.']);
     }
@@ -119,7 +123,7 @@ class PaymentReceiptTest extends TestCase
         $payment = $this->registeredPayment();
         $path = $payment->receipt_path;
 
-        $this->actingAs($this->student)->putJson("/api/payments/{$payment->id}", ['amount' => 150])->assertOk();
+        $this->actingAs($this->student)->putJson("/api/payments/{$payment->id}", ['payment_method' => 'caja'])->assertOk();
 
         $this->assertSame($path, $payment->fresh()->receipt_path);
         $this->privateDisk()->assertExists($path);

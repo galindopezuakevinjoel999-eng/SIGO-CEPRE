@@ -3,6 +3,8 @@
 namespace Tests\Feature\Seeders;
 
 use App\Models\Schedule;
+use App\Models\Semester;
+use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\PaymentService;
 use Database\Seeders\DatabaseSeeder;
@@ -50,14 +52,12 @@ class DemoSeederTest extends TestCase
             ->assertJsonPath('user.role', User::ROLE_ADMIN);
     }
 
-    public function test_configura_el_costo_y_las_cuotas_de_prueba(): void
+    public function test_usa_los_montos_reales_del_ciclo_y_no_valores_de_prueba(): void
     {
         $this->seedAsLocal();
 
-        $payments = app(PaymentService::class);
-        $this->assertSame(350.0, $payments->enrollmentCost());
-        $this->assertSame(2, $payments->installmentCount());
-        $this->assertSame([['number' => 1, 'amount' => 175.0], ['number' => 2, 'amount' => 175.0]], $payments->installmentPlan());
+        $this->assertNull(SystemSetting::where('key', PaymentService::COST_SETTING)->value('value'));
+        $this->assertSame(['unico', 'fraccionado'], array_keys(app(PaymentService::class)->plansFor(Semester::current())));
     }
 
     public function test_horarios_sin_cruces_por_docente_ni_por_aula(): void

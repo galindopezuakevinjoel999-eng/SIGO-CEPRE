@@ -15,7 +15,7 @@ class ExamResult extends Model
     use HasFactory;
 
     protected $fillable = [
-        'exam_id', 'student_id', 'correct', 'wrong', 'blank', 'score', 'group', 'rank', 'rank_in_group',
+        'exam_id', 'student_id', 'correct', 'wrong', 'blank', 'score', 'group', 'career_id', 'rank', 'rank_in_group', 'rank_in_career',
     ];
 
     protected $casts = [
@@ -25,11 +25,18 @@ class ExamResult extends Model
         'score' => 'float',
         'rank' => 'integer',
         'rank_in_group' => 'integer',
+        'rank_in_career' => 'integer',
+        'career_id' => 'integer',
     ];
 
     public function exam()
     {
         return $this->belongsTo(Exam::class);
+    }
+
+    public function career()
+    {
+        return $this->belongsTo(Career::class);
     }
 
     public function student()

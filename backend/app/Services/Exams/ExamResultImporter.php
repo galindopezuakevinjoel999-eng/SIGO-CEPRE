@@ -43,7 +43,7 @@ class ExamResultImporter
             ->get()
             ->keyBy('dni');
 
-        $groups = $this->groupsInSemester($exam, $students);
+        $placements = $this->placementsInSemester($exam, $students);
 
         $valid = [];
         $firstLineByDni = [];
@@ -70,7 +70,7 @@ class ExamResultImporter
                 continue;
             }
 
-            $group = $groups[$student->id] ?? null;
+            $group = $placements[$student->id]['group'] ?? null;
 
             if ($exam->semester_id && ! $group) {
                 $report->addError($row, ['El estudiante no tiene matrícula aprobada en el semestre del examen.']);
@@ -94,6 +94,7 @@ class ExamResultImporter
                 'blank' => $blank,
                 'score' => $exam->score($correct, $wrong, $blank),
                 'group' => $group,
+                'career_id' => $placements[$student->id]['career_id'] ?? null,
             ];
         }
 
@@ -134,12 +135,12 @@ class ExamResultImporter
     }
 
     /**
-     * Grupo de cada estudiante: el de la carrera de su matrícula aprobada en
-     * el semestre del examen. Sin semestre (exámenes antiguos), sin grupo.
+     * Carrera y grupo de cada estudiante: los de su matrícula aprobada en el
+     * semestre del examen. Sin semestre (exámenes antiguos), sin datos.
      *
-     * @return array<int, string> student_id => grupo
+     * @return array<int, array{group: ?string, career_id: ?int}> student_id => ubicación
      */
-    private function groupsInSemester(Exam $exam, Collection $students): array
+    private function placementsInSemester(Exam $exam, Collection $students): array
     {
         if (! $exam->semester_id || $students->isEmpty()) {
             return [];
@@ -150,8 +151,8 @@ class ExamResultImporter
             ->where('status', 'approved')
             ->whereIn('student_id', $students->pluck('id'))
             ->get()
-            ->mapWithKeys(fn (Enrollment $e) => [$e->student_id => $e->group ?? $e->career?->group])
-            ->filter()
+            ->mapWithKeys(fn (Enrollment $e) => [$e->student_id => ['group' => $e->group ?? $e->career?->group, 'career_id' => $e->career_id]])
+            ->filter(fn ($p) => $p['group'])
             ->all();
     }
 

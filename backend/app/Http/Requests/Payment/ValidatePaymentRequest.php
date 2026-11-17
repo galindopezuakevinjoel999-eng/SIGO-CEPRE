@@ -52,7 +52,7 @@ class ValidatePaymentRequest extends FormRequest
 
                 $payments = app(PaymentService::class);
 
-                if ($payments->enrollmentCost() === null) {
+                if ($payments->costFor($payment->enrollment) === null) {
                     $validator->errors()->add('status', 'El costo de matrícula no está configurado: no se puede calcular el saldo.');
 
                     return;

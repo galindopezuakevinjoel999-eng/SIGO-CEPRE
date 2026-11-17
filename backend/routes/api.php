@@ -67,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('enrollments', EnrollmentController::class)->except(['store', 'update']);
     Route::apiResource('payments', PaymentController::class)->except(['store']);
     Route::put('/enrollments/{enrollment}/status', [EnrollmentController::class, 'updateStatus'])->name('enrollments.status');
+    Route::put('/enrollments/{enrollment}/certificate', [EnrollmentController::class, 'markCertificateDelivered'])->name('enrollments.certificate');
     Route::put('/payments/{payment}/validate', [PaymentController::class, 'validatePayment'])->name('payments.validate');
 
     // Descarga de archivos privados (storage/app/private). Cada acción aplica su policy.
@@ -77,6 +78,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('schedules', ScheduleController::class);
     Route::get('/semesters/current', [SemesterController::class, 'current']);
     Route::apiResource('semesters', SemesterController::class);
+    Route::put('/semesters/{semester}/vacancies', [SemesterController::class, 'vacancies'])->name('semesters.vacancies');
     Route::apiResource('materials', MaterialController::class);
     // Exámenes y resultados (RF30–RF34). Permisos en ExamPolicy.
     Route::get('/exams/import-template', [ExamController::class, 'template'])->name('exams.template');
@@ -84,6 +86,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('exams', ExamController::class);
     Route::post('/exams/{exam}/import', [ExamController::class, 'import'])->name('exams.import');
     Route::get('/exams/{exam}/results', [ExamController::class, 'results'])->name('exams.results');
+    Route::get('/exams/{exam}/admitted', [ExamController::class, 'admitted'])->name('exams.admitted');
     Route::put('/exams/{exam}/publish', [ExamController::class, 'publish'])->name('exams.publish');
     Route::apiResource('attendance', AttendanceController::class);
     // Panel de contenido público (MongoDB). Permisos: ContentPolicy (solo admin).

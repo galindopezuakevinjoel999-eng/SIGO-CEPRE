@@ -72,7 +72,7 @@ class EnrollmentController extends Controller
         }
 
         $enrollment = Enrollment::create($data);
-        $this->replaceDocuments($enrollment, $request->documentFiles());
+        $this->storeDocuments($enrollment, $request->documentFiles(), $request->step());
         $this->markSubmitted($enrollment, $request->step());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']), 201);
@@ -92,7 +92,7 @@ class EnrollmentController extends Controller
     public function update(UpdateEnrollmentRequest $request, Enrollment $enrollment)
     {
         $enrollment->update($request->enrollmentData());
-        $this->replaceDocuments($enrollment, $request->documentFiles());
+        $this->storeDocuments($enrollment, $request->documentFiles(), $request->step());
         $this->markSubmitted($enrollment, $request->step());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']));
@@ -122,28 +122,84 @@ class EnrollmentController extends Controller
     }
 
     /**
-     * Los documentos enviados reemplazan a los anteriores. Primero se guardan
-     * los nuevos y la matrícula; después se borran los anteriores del disco.
+     * Documentos por tipo: enviar uno reemplaza el anterior de ese tipo y
+     * conserva los demás. Primero se guardan los nuevos y la matrícula;
+     * después se borran los reemplazados del disco.
      *
-     * @param  list<UploadedFile>  $files
+     * @param  array<string, UploadedFile>  $files  tipo => archivo
      */
-    private function replaceDocuments(Enrollment $enrollment, array $files): void
+    private function storeDocuments(Enrollment $enrollment, array $files, int $step): void
     {
-        if (! $files) {
+        $previous = [];
+
+        if ($files) {
+            $documents = collect($enrollment->documents ?? [])->keyBy('type');
+
+            foreach ($files as $type => $file) {
+                if ($old = $documents->get($type)) {
+                    $previous[] = $old['path'];
+                }
+
+                $documents[$type] = [
+                    'id' => (string) Str::uuid(),
+                    'type' => $type,
+                    ...$this->files->store($file, "enrollments/{$enrollment->id}"),
+                ];
+            }
+
+            $enrollment->documents = $documents->values()->all();
+        }
+
+        $this->syncCertificateStatus($enrollment, $step);
+        $enrollment->save();
+
+        $this->files->delete($previous); // los reemplazados, después de guardar los nuevos
+    }
+
+    /**
+     * Desde el paso 3: sin certificado de estudios, la matrícula queda con el
+     * certificado "pendiente de regularizar"; si lo sube, queda "subido". Si la
+     * administración ya lo marcó como entregado, no cambia.
+     */
+    private function syncCertificateStatus(Enrollment $enrollment, int $step): void
+    {
+        if ($step < 3 || $enrollment->certificate_status === Enrollment::CERTIFICATE_DELIVERED) {
             return;
         }
 
-        $previous = $enrollment->documentPaths();
+        $enrollment->certificate_status = $enrollment->hasDocument('certificado_estudios')
+            ? Enrollment::CERTIFICATE_UPLOADED
+            : Enrollment::CERTIFICATE_PENDING;
+    }
 
-        $enrollment->documents = collect($files)
-            ->map(fn (UploadedFile $file) => [
-                'id' => (string) Str::uuid(),
-                ...$this->files->store($file, "enrollments/{$enrollment->id}"),
-            ])
-            ->all();
-        $enrollment->save();
+    /**
+     * La administración marca el certificado de estudios como entregado
+     * (regularizado en físico). Queda en audit_logs.
+     */
+    public function markCertificateDelivered(Request $request, Enrollment $enrollment, AuditLogger $audit)
+    {
+        Gate::authorize('approve', $enrollment);
 
-        $this->files->delete($previous);
+        if ($enrollment->certificate_status === Enrollment::CERTIFICATE_DELIVERED) {
+            return response()->json(['message' => 'El certificado ya figura como entregado.'], 422);
+        }
+
+        DB::transaction(function () use ($request, $enrollment, $audit) {
+            $previous = $enrollment->certificate_status;
+
+            $enrollment->forceFill([
+                'certificate_status' => Enrollment::CERTIFICATE_DELIVERED,
+                'certificate_delivered_at' => now(),
+                'certificate_delivered_by' => $request->user()->id,
+            ])->save();
+
+            $audit->record($request->user(), $enrollment->student_id, AuditLogger::CERTIFICATE_DELIVERED, null, [
+                'enrollment_id' => $enrollment->id,
+                'previous_status' => $previous,
+            ]);
+        });
+
+        return response()->json($enrollment->only(['id', 'certificate_status', 'certificate_delivered_at', 'certificate_delivered_by']));
     }
 
     public function destroy(Enrollment $enrollment)

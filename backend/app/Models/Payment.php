@@ -28,6 +28,7 @@ class Payment extends Model
         'payment_method',
         'receipt_path',
         'receipt_name',
+        'receipt_number',
         'partial',
         'due_date',
         'paid_date',
@@ -42,6 +43,9 @@ class Payment extends Model
     ];
 
     protected $casts = [
+        // Número en la API con cualquier motor: MySQL devuelve los decimal como texto ("150.00").
+        'amount' => 'float',
+        'balance' => 'float',
         'partial' => 'boolean',
         'due_date' => 'date',
         'paid_date' => 'date',

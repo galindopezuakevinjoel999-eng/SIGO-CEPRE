@@ -6,10 +6,8 @@ use App\Models\AuditLog;
 use App\Models\Career;
 use App\Models\Classroom;
 use App\Models\Payment;
-use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\AuditLogger;
-use App\Services\PaymentService;
 use Database\Seeders\FoundationSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Socialite\Facades\Socialite;
@@ -35,9 +33,10 @@ class EnrollmentFlowTest extends TestCase
     public function test_flujo_completo_de_matricula(): void
     {
         // ── Preparación ─────────────────────────────────────────────
+        // Ciclo Ordinario II 2026 real: inscripción del 03/08 al 21/08/2026,
+        // pago fraccionado S/ 650 en dos cuotas (500 + 150).
         $this->seed(FoundationSeeder::class);
-        SystemSetting::setValue(PaymentService::COST_SETTING, '350', 'decimal');
-        SystemSetting::setValue(PaymentService::INSTALLMENTS_SETTING, '2', 'integer');
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-08-10 10:00:00', 'America/Lima'));
 
         $sistemas = Career::where('code', 'SIS')->firstOrFail();
         $aula01 = Classroom::where('number', '01')->firstOrFail();
@@ -83,8 +82,11 @@ class EnrollmentFlowTest extends TestCase
         $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 2, 'career_id' => $sistemas->id])
             ->assertOk()->assertJsonPath('current_step', 2);
 
-        $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 3, 'documents' => [$this->fakePdf('dni.pdf'), $this->fakePdf('certificado.pdf')]])
-            ->assertOk()->assertJsonPath('current_step', 3);
+        // Sin certificado de estudios: queda pendiente de regularizar.
+        $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 3, 'documents' => $this->requiredDocuments()])
+            ->assertOk()
+            ->assertJsonPath('current_step', 3)
+            ->assertJsonPath('certificate_status', 'pending');
 
         $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 4])
             ->assertOk()
@@ -95,14 +97,16 @@ class EnrollmentFlowTest extends TestCase
         // ── 5. Pago 1 (cuota 1 de 2) ────────────────────────────────
         $payment1 = $this->as($studentToken)->postJson('/api/payments', [
             'enrollment_id' => $enrollmentId,
-            'amount' => 175,
-            'payment_method' => 'yape',
-            'receipt' => $this->fakePdf('voucher-cuota-1.pdf'),
+            'amount' => 500,
+            'modality' => 'fraccionado',
+            'payment_method' => 'caja',
+            'receipt_number' => '001-004501',
+            'receipt' => $this->fakePdf('recibo-cuota-1.pdf'),
         ])
             ->assertCreated()
             ->assertJsonPath('status', Payment::STATUS_PENDING)
             ->assertJsonPath('installment_number', 1)
-            ->assertJsonPath('balance', 350)
+            ->assertJsonPath('balance', 650)
             ->assertJsonPath('partial', true)
             ->json('id');
 
@@ -116,18 +120,19 @@ class EnrollmentFlowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('status', Payment::STATUS_VALIDATED)
             ->assertJsonPath('validated_by', $admin->id)
-            ->assertJsonPath('balance', 175);
+            ->assertJsonPath('balance', 150);
 
         // ── 7. Pago 2 (cuota 2 de 2) ────────────────────────────────
         $payment2 = $this->as($studentToken)->postJson('/api/payments', [
             'enrollment_id' => $enrollmentId,
-            'amount' => 175,
-            'payment_method' => 'transferencia',
-            'receipt' => $this->fakePdf('voucher-cuota-2.pdf'),
+            'amount' => 150,
+            'payment_method' => 'caja',
+            'receipt_number' => '001-004502',
+            'receipt' => $this->fakePdf('recibo-cuota-2.pdf'),
         ])
             ->assertCreated()
             ->assertJsonPath('installment_number', 2)
-            ->assertJsonPath('balance', 175)
+            ->assertJsonPath('balance', 150)
             ->assertJsonPath('partial', false)
             ->json('id');
 
@@ -137,7 +142,7 @@ class EnrollmentFlowTest extends TestCase
             ->assertJsonPath('balance', 0);
 
         // Ya está pagada: no se aceptan más pagos.
-        $this->as($studentToken)->postJson('/api/payments', ['enrollment_id' => $enrollmentId, 'amount' => 1, 'receipt' => $this->fakePdf()])
+        $this->as($studentToken)->postJson('/api/payments', ['enrollment_id' => $enrollmentId, 'amount' => 150, 'receipt_number' => '001-004503', 'receipt' => $this->fakePdf()])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['enrollment_id' => 'Esta matrícula ya está pagada por completo.']);
 
@@ -161,7 +166,8 @@ class EnrollmentFlowTest extends TestCase
             ->assertJsonPath('student_name', 'Ana Quispe Huamán')
             ->assertJsonPath('career', 'Ingeniería de Sistemas')
             ->assertJsonPath('group', 'A')
-            ->assertJsonPath('semester', '2026-II');
+            ->assertJsonPath('semester', 'Ciclo Ordinario II 2026')
+            ->assertJsonPath('has_photo', true); // foto_postulante del paso 3
 
         $pdf = $this->as($studentToken)->get("/api/enrollments/{$enrollmentId}/carnet/download")->assertOk();
         $this->assertSame('application/pdf', $pdf->headers->get('Content-Type'));

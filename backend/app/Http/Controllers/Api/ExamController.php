@@ -7,6 +7,7 @@ use App\Http\Requests\Exam\ExamRequest;
 use App\Http\Requests\Exam\ImportExamResultsRequest;
 use App\Models\Exam;
 use App\Services\AuditLogger;
+use App\Services\Exams\AdmissionService;
 use App\Services\Exams\CsvTemplateReader;
 use App\Services\Exams\ExamRanking;
 use App\Services\Exams\ExamResultImporter;
@@ -126,6 +127,34 @@ class ExamController extends Controller
                 ->orderBy('id')
                 ->paginate(100)
         );
+    }
+
+    /** Ingresantes por carrera según vacantes y puntaje mínimo del ciclo (admin y coordinador). */
+    public function admitted(Exam $exam, AdmissionService $admission)
+    {
+        Gate::authorize('view', $exam);
+
+        $careers = collect($admission->forExam($exam))->map(fn ($c) => [
+            ...$c,
+            'admitted' => array_map(fn ($r) => $this->admittedRow($r), $c['admitted']),
+            'others' => array_map(fn ($r) => $this->admittedRow($r), $c['others']),
+        ]);
+
+        return response()->json([
+            'exam' => $exam->only(['id', 'name', 'date', 'status']),
+            'min_admission_score' => $exam->semester?->min_admission_score,
+            'careers' => $careers,
+        ]);
+    }
+
+    private function admittedRow($result): array
+    {
+        return [
+            'student' => $result->student?->only(['id', 'name', 'dni']),
+            'score' => $result->score,
+            'rank' => $result->rank,
+            'rank_in_career' => $result->rank_in_career,
+        ];
     }
 
     /** Publica los resultados: desde ahora los estudiantes los ven (RF33). */

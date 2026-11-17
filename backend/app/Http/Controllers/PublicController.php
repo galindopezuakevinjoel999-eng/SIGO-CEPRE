@@ -6,6 +6,7 @@ use App\Models\Content\Announcement;
 use App\Models\Content\Faq;
 use App\Models\Content\HomeBlock;
 use App\Models\Content\News;
+use App\Models\SystemSetting;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -24,6 +25,13 @@ class PublicController extends Controller
     public function home()
     {
         return response()->json([
+            'contact' => [
+                'office' => SystemSetting::getValue('contact_office'),
+                'office_hours' => SystemSetting::getValue('contact_office_hours'),
+                'phones' => SystemSetting::getValue('contact_phones') ?? [],
+                'email' => SystemSetting::getValue('contact_email'),
+                'payment_place' => SystemSetting::getValue('payment_place'),
+            ],
             'blocks' => HomeBlock::where('active', true)->orderBy('order')->get(),
             'latest_news' => News::published()->orderByDesc('published_at')->limit(self::HOME_NEWS)->get()->map->only($this->newsSummaryFields()),
             'announcements' => $this->currentAnnouncements()->take(self::HOME_ANNOUNCEMENTS)->values(),

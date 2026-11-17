@@ -34,7 +34,7 @@ class PaymentReviewTest extends TestCase
         $this->payment = Payment::factory()
             ->for($this->enrollment->student, 'student')
             ->for($this->enrollment)
-            ->create(['amount' => 200, 'balance' => 500]);
+            ->create(['amount' => 200, 'balance' => 500, 'receipt_number' => 'RC-REVIEW-1']);
     }
 
     private function review(array $data)
@@ -104,6 +104,7 @@ class PaymentReviewTest extends TestCase
         $this->assertSame([
             'payment_id' => $this->payment->id,
             'enrollment_id' => $this->enrollment->id,
+            'receipt_number' => 'RC-REVIEW-1',
             'amount' => 200,
             'previous_status' => Payment::STATUS_PENDING,
             'new_status' => Payment::STATUS_VALIDATED,

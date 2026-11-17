@@ -13,6 +13,12 @@ class ProfileCompletionTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->openEnrollmentCycle();
+    }
+
     private function incompleteStudent(): User
     {
         return User::factory()->student()->create(['profile_completed' => false]);

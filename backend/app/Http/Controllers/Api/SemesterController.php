@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SemesterRequest;
 use App\Models\Semester;
 use Illuminate\Http\Request;
 
@@ -25,24 +26,10 @@ class SemesterController extends Controller
         return response()->json($semester);
     }
 
-    public function store(Request $request)
+    public function store(SemesterRequest $request)
     {
-        if (! $request->user()->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $data = $request->validate([
-            'code' => ['required', 'string', 'max:10', 'unique:semesters,code'],
-            'year' => ['required', 'integer', 'min:2020'],
-            'cycle' => ['required', 'integer', 'in:1,2'],
-            'name' => ['nullable', 'string'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date'],
-            'is_active' => ['nullable', 'boolean'],
-        ]);
-
-        $activate = ! empty($data['is_active']);
-        $semester = Semester::create([...$data, 'is_active' => false]);
+        $activate = $request->boolean('is_active');
+        $semester = Semester::create([...$request->semesterData(), 'is_active' => false]);
 
         // Desactiva los demás y reinicia las faltas de los estudiantes.
         if ($activate) {
@@ -57,36 +44,41 @@ class SemesterController extends Controller
         return response()->json($semester);
     }
 
-    public function update(Request $request, Semester $semester)
+    public function update(SemesterRequest $request, Semester $semester)
     {
-        if (! $request->user()->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        $data = $request->validate([
-            'code' => ['nullable', 'string', 'max:10', 'unique:semesters,code,'.$semester->id],
-            'year' => ['nullable', 'integer', 'min:2020'],
-            'cycle' => ['nullable', 'integer', 'in:1,2'],
-            'name' => ['nullable', 'string'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date'],
-            'is_active' => ['nullable', 'boolean'],
-        ]);
+        $semester->update($request->semesterData());
 
         // Activar pasa por Semester::activate() (reinicia el ciclo); desactivar
         // (is_active = false) se guarda como un campo más.
-        $activate = ! empty($data['is_active']);
-        if ($activate) {
-            unset($data['is_active']);
-        }
-
-        $semester->update($data);
-
-        if ($activate) {
-            $semester->activate();
+        if ($request->has('is_active')) {
+            $request->boolean('is_active') ? $semester->activate() : $semester->update(['is_active' => false]);
         }
 
         return response()->json($semester->refresh());
+    }
+
+    /**
+     * Vacantes por carrera del ciclo: {"vacancies": [{"career_id": 1, "vacancies": 3}, ...]}.
+     * Reemplaza las vacantes de las carreras enviadas; las demás no cambian.
+     */
+    public function vacancies(Request $request, Semester $semester)
+    {
+        if (! $request->user()->isAdmin()) {
+            return response()->json(['message' => 'Solo administración puede configurar vacantes.'], 403);
+        }
+
+        $data = $request->validate([
+            'vacancies' => ['required', 'array', 'min:1'],
+            'vacancies.*.career_id' => ['required', 'integer', 'distinct', 'exists:careers,id'],
+            'vacancies.*.vacancies' => ['required', 'integer', 'between:0,1000'],
+        ]);
+
+        $semester->careers()->syncWithoutDetaching(
+            collect($data['vacancies'])->mapWithKeys(fn ($v) => [$v['career_id'] => ['vacancies' => $v['vacancies']]])->all()
+        );
+
+        return response()->json($semester->careers()->orderBy('name')->get(['careers.id', 'code', 'name', 'group'])
+            ->map(fn ($career) => [...$career->only(['id', 'code', 'name', 'group']), 'vacancies' => $career->pivot->vacancies]));
     }
 
     public function destroy(Semester $semester)
