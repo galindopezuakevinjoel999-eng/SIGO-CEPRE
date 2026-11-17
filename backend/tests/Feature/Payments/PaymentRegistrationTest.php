@@ -36,6 +36,7 @@ class PaymentRegistrationTest extends TestCase
     {
         return $this->actingAs($this->student)->postJson('/api/payments', [
             'enrollment_id' => $this->enrollment->id,
+            'receipt' => $this->fakePdf('voucher.pdf'),
             ...$data,
         ]);
     }
@@ -69,7 +70,7 @@ class PaymentRegistrationTest extends TestCase
         $this->pay([
             'amount' => 200,
             'payment_method' => 'yape',
-            'receipt_url' => 'comprobantes/123.jpg',
+            'receipt' => $this->fakePdf('voucher.pdf'),
         ])
             ->assertCreated()
             ->assertJsonPath('student_id', $this->student->id)

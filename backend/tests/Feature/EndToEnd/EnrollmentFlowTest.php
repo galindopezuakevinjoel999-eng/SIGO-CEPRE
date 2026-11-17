@@ -83,7 +83,7 @@ class EnrollmentFlowTest extends TestCase
         $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 2, 'career_id' => $sistemas->id])
             ->assertOk()->assertJsonPath('current_step', 2);
 
-        $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 3, 'documents' => ['dni.pdf', 'certificado.pdf']])
+        $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 3, 'documents' => [$this->fakePdf('dni.pdf'), $this->fakePdf('certificado.pdf')]])
             ->assertOk()->assertJsonPath('current_step', 3);
 
         $this->as($studentToken)->putJson("/api/enrollments/{$enrollmentId}", ['step' => 4])
@@ -96,7 +96,7 @@ class EnrollmentFlowTest extends TestCase
             'enrollment_id' => $enrollmentId,
             'amount' => 175,
             'payment_method' => 'yape',
-            'receipt_url' => 'comprobantes/ana-cuota-1.jpg',
+            'receipt' => $this->fakePdf('voucher-cuota-1.pdf'),
         ])
             ->assertCreated()
             ->assertJsonPath('status', Payment::STATUS_PENDING)
@@ -122,7 +122,7 @@ class EnrollmentFlowTest extends TestCase
             'enrollment_id' => $enrollmentId,
             'amount' => 175,
             'payment_method' => 'transferencia',
-            'receipt_url' => 'comprobantes/ana-cuota-2.jpg',
+            'receipt' => $this->fakePdf('voucher-cuota-2.pdf'),
         ])
             ->assertCreated()
             ->assertJsonPath('installment_number', 2)
@@ -136,7 +136,7 @@ class EnrollmentFlowTest extends TestCase
             ->assertJsonPath('balance', 0);
 
         // Ya está pagada: no se aceptan más pagos.
-        $this->as($studentToken)->postJson('/api/payments', ['enrollment_id' => $enrollmentId, 'amount' => 1])
+        $this->as($studentToken)->postJson('/api/payments', ['enrollment_id' => $enrollmentId, 'amount' => 1, 'receipt' => $this->fakePdf()])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['enrollment_id' => 'Esta matrícula ya está pagada por completo.']);
 

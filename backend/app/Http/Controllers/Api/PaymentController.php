@@ -8,6 +8,7 @@ use App\Http\Requests\Payment\UpdatePaymentRequest;
 use App\Http\Requests\Payment\ValidatePaymentRequest;
 use App\Models\Payment;
 use App\Services\PaymentService;
+use App\Services\PrivateFiles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -53,11 +54,19 @@ class PaymentController extends Controller
         return response()->json($this->payments->correct($payment, $request->validated()));
     }
 
+    /** Descargar el comprobante (dueño, admin o coordinador). */
+    public function downloadReceipt(Payment $payment, PrivateFiles $files)
+    {
+        Gate::authorize('view', $payment);
+
+        return $files->download($payment->receipt_path, $payment->receipt_name);
+    }
+
     public function destroy(Payment $payment)
     {
         Gate::authorize('delete', $payment);
 
-        $payment->delete();
+        $payment->delete(); // también borra el comprobante del disco (Payment::booted)
 
         return response()->json(['success' => true]);
     }

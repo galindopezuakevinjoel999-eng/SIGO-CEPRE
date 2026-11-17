@@ -58,6 +58,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('payments', PaymentController::class)->except(['store']);
     Route::put('/enrollments/{enrollment}/status', [EnrollmentController::class, 'updateStatus'])->name('enrollments.status');
     Route::put('/payments/{payment}/validate', [PaymentController::class, 'validatePayment'])->name('payments.validate');
+
+    // Descarga de archivos privados (storage/app/private). Cada acción aplica su policy.
+    // Para subir archivos al editar, el cliente envía POST con _method=PUT (multipart).
+    Route::get('/enrollments/{enrollment}/documents/{document}', [EnrollmentController::class, 'downloadDocument'])->name('enrollments.documents.download');
+    Route::get('/payments/{payment}/receipt', [PaymentController::class, 'downloadReceipt'])->name('payments.receipt');
+    Route::get('/materials/{material}/download', [MaterialController::class, 'download'])->name('materials.download');
     Route::apiResource('schedules', ScheduleController::class);
     Route::get('/semesters/current', [SemesterController::class, 'current']);
     Route::apiResource('semesters', SemesterController::class);

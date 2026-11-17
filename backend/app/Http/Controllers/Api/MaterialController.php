@@ -3,104 +3,109 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Enrollment;
+use App\Http\Requests\Material\StoreMaterialRequest;
+use App\Http\Requests\Material\UpdateMaterialRequest;
 use App\Models\Material;
+use App\Services\PrivateFiles;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Gate;
 
+/**
+ * Materiales de estudio. Permisos en App\Policies\MaterialPolicy; los archivos
+ * viven en el disco privado y se descargan con download().
+ */
 class MaterialController extends Controller
 {
+    public function __construct(private PrivateFiles $files) {}
+
     public function index(Request $request)
     {
-        $user = $request->user();
+        Gate::authorize('viewAny', Material::class);
 
-        if ($user->isEstudiante()) {
-            $hasActiveEnrollment = Enrollment::where('student_id', $user->id)
-                ->where('status', 'approved')
-                ->exists();
+        $query = Material::query()->with('course:id,code,name')->latest();
 
-            if (! $hasActiveEnrollment) {
-                return response()->json(['message' => 'Solo estudiantes con matrícula aprobada pueden ver materiales'], 403);
-            }
-
-            return response()->json(Material::where('status', 'published')->paginate(20));
+        if (Gate::denies('viewDrafts', Material::class)) {
+            $query->where('status', 'published');
         }
 
-        if (! $user->isAdmin() && ! $user->isDocente() && ! $user->isCoordinador()) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        if ($request->filled('course_id')) {
+            $query->where('course_id', $request->integer('course_id'));
         }
 
-        return response()->json(Material::paginate(20));
+        return response()->json($query->paginate(20));
     }
 
-    public function store(Request $request)
+    /** El docente sube un material; queda en borrador hasta que el admin lo publique. */
+    public function store(StoreMaterialRequest $request)
     {
-        if (! $request->user()->isAdmin() && ! $request->user()->isDocente()) {
-            return response()->json(['message' => 'Solo admin y docentes pueden subir materiales'], 403);
-        }
-
-        $data = $request->validate([
-            'course_id' => ['nullable', 'exists:courses,id'],
-            'title' => ['required', 'string'],
-            'description' => ['nullable', 'string'],
-            'file_url' => ['nullable', 'string'],
-            'type' => ['nullable', 'string'],
-            'status' => ['nullable', 'in:draft,published'],
-        ]);
-
+        $data = $request->safe()->except('file');
         $data['uploaded_by'] = $request->user()->id;
 
-        if ($request->user()->isDocente()) {
+        if (Gate::denies('publish', Material::class)) {
             $data['status'] = 'draft';
         }
 
-        return response()->json(Material::create($data), 201);
+        $material = new Material($data);
+        $this->attachFile($material, $request->file('file'));
+        $material->save();
+
+        return response()->json($material, 201);
     }
 
-    public function show(Request $request, Material $material)
+    public function show(Material $material)
     {
-        if ($request->user()->isEstudiante() && $material->status !== 'published') {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        Gate::authorize('view', $material);
 
-        return response()->json($material);
+        return response()->json($material->load('course:id,code,name'));
     }
 
-    public function update(Request $request, Material $material)
+    /** Descargar el archivo del material (RF29). */
+    public function download(Material $material)
     {
-        if (! $request->user()->isAdmin() && ! $request->user()->isDocente()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        Gate::authorize('download', $material);
 
-        if ($request->user()->isDocente() && $material->uploaded_by !== $request->user()->id) {
-            return response()->json(['message' => 'Solo el docente autor puede modificar este material'], 403);
-        }
+        return $this->files->download($material->file_path, $material->file_name);
+    }
 
-        $data = $request->validate([
-            'course_id' => ['nullable', 'exists:courses,id'],
-            'title' => ['nullable', 'string'],
-            'description' => ['nullable', 'string'],
-            'file_url' => ['nullable', 'string'],
-            'type' => ['nullable', 'string'],
-            'status' => ['nullable', 'in:draft,published'],
-        ]);
+    public function update(UpdateMaterialRequest $request, Material $material)
+    {
+        $data = $request->safe()->except('file');
 
-        if ($request->user()->isDocente()) {
+        if (Gate::denies('publish', Material::class)) {
             unset($data['status']);
         }
 
-        $material->update($data);
+        $material->fill($data);
+
+        $previous = null;
+        if ($request->hasFile('file')) {
+            $previous = $material->file_path;
+            $this->attachFile($material, $request->file('file'));
+        }
+
+        $material->save();
+        $this->files->delete($previous); // el anterior se borra después de guardar el nuevo
 
         return response()->json($material);
     }
 
-    public function destroy(Request $request, Material $material)
+    public function destroy(Material $material)
     {
-        if (! $request->user()->isAdmin()) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        Gate::authorize('delete', $material);
 
-        $material->delete();
+        $material->delete(); // también borra el archivo del disco (Material::booted)
 
         return response()->json(['success' => true]);
+    }
+
+    private function attachFile(Material $material, UploadedFile $file): void
+    {
+        $stored = $this->files->store($file, 'materials');
+
+        $material->file_path = $stored['path'];
+        $material->file_name = $stored['name'];
+        $material->file_size = $stored['size'];
+        $material->type = strtolower($file->getClientOriginalExtension()); // pdf, docx o pptx
     }
 }

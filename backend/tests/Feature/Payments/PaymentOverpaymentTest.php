@@ -47,6 +47,7 @@ class PaymentOverpaymentTest extends TestCase
         return $this->actingAs($this->student)->postJson('/api/payments', [
             'enrollment_id' => $this->enrollment->id,
             'amount' => $amount,
+            'receipt' => $this->fakePdf('voucher.pdf'),
         ]);
     }
 

@@ -8,6 +8,7 @@ use App\Models\Career;
 use App\Models\Classroom;
 use App\Models\Semester;
 use App\Models\User;
+use App\Services\PrivateFiles;
 
 class Enrollment extends Model
 {
@@ -35,6 +36,28 @@ class Enrollment extends Model
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
     ];
+
+    /** Al eliminar la matrícula se borran sus documentos del disco privado. */
+    protected static function booted(): void
+    {
+        static::deleted(fn (Enrollment $enrollment) => app(PrivateFiles::class)->delete($enrollment->documentPaths()));
+    }
+
+    /**
+     * Documentos subidos en el paso 3: lista de {id, name, path, mime, size}.
+     *
+     * @return list<string>
+     */
+    public function documentPaths(): array
+    {
+        return collect($this->documents ?? [])->pluck('path')->filter()->values()->all();
+    }
+
+    /** @return array{id: string, name: string, path: string, mime: ?string, size: int}|null */
+    public function findDocument(string $id): ?array
+    {
+        return collect($this->documents ?? [])->firstWhere('id', $id);
+    }
 
     public function student()
     {

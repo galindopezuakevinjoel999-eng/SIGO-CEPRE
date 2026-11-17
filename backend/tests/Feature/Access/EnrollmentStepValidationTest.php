@@ -61,7 +61,7 @@ class EnrollmentStepValidationTest extends TestCase
             ->postJson('/api/enrollments', [
                 'step' => 4,
                 'career_id' => Career::factory()->create()->id,
-                'documents' => ['dni.pdf'],
+                'documents' => [$this->fakePdf('dni.pdf')],
                 'classroom_id' => 9999,
             ])
             ->assertUnprocessable()
@@ -94,7 +94,7 @@ class EnrollmentStepValidationTest extends TestCase
         $enrollment = Enrollment::factory()->for($this->student, 'student')->create(['current_step' => 2]);
 
         $this->actingAs($this->student)
-            ->putJson("/api/enrollments/{$enrollment->id}", ['step' => 3, 'documents' => ['dni.pdf']])
+            ->putJson("/api/enrollments/{$enrollment->id}", ['step' => 3, 'documents' => [$this->fakePdf('dni.pdf')]])
             ->assertOk()
             ->assertJsonPath('current_step', 3)
             ->assertJsonPath('career_id', $enrollment->career_id);

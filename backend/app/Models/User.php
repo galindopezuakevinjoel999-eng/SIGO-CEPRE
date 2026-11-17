@@ -137,6 +137,17 @@ class User extends Authenticatable
         return $this->hasMany(SystemNotification::class, 'user_id');
     }
 
+    /** ¿Tiene matrícula aprobada en el semestre activo? (acceso a materiales) */
+    public function isEnrolledInCurrentSemester(): bool
+    {
+        $semester = Semester::current();
+
+        return $semester !== null && $this->enrollments()
+            ->where('status', 'approved')
+            ->where('semester_id', $semester->id)
+            ->exists();
+    }
+
     /** Faltas del estudiante en los horarios del semestre activo (0 si no hay semestre activo). */
     public function currentSemesterAbsences(): int
     {

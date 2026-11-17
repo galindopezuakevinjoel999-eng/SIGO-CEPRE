@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Enrollment;
 use App\Models\User;
+use App\Services\PrivateFiles;
 
 class Payment extends Model
 {
@@ -25,7 +26,8 @@ class Payment extends Model
         'currency',
         'status',
         'payment_method',
-        'receipt_url',
+        'receipt_path',
+        'receipt_name',
         'partial',
         'due_date',
         'paid_date',
@@ -46,6 +48,12 @@ class Payment extends Model
         'installment_plan' => 'array',
         'validated_at' => 'datetime',
     ];
+
+    /** Al eliminar el pago se borra su comprobante del disco privado. */
+    protected static function booted(): void
+    {
+        static::deleted(fn (Payment $payment) => app(PrivateFiles::class)->delete($payment->receipt_path));
+    }
 
     public function student()
     {

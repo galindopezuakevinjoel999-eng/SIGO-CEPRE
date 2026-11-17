@@ -11,9 +11,12 @@ use App\Models\Enrollment;
 use App\Models\Semester;
 use App\Services\AuditLogger;
 use App\Services\EnrollmentCodeService;
+use App\Services\PrivateFiles;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 
 /**
  * Matrículas. Los permisos están en App\Policies\EnrollmentPolicy y la
@@ -21,6 +24,8 @@ use Illuminate\Support\Facades\Gate;
  */
 class EnrollmentController extends Controller
 {
+    public function __construct(private PrivateFiles $files) {}
+
     /**
      * Listar matrículas: admin/coordinador ven todas; el resto, solo las suyas.
      */
@@ -66,6 +71,7 @@ class EnrollmentController extends Controller
         }
 
         $enrollment = Enrollment::create($data);
+        $this->replaceDocuments($enrollment, $request->documentFiles());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']), 201);
     }
@@ -84,8 +90,44 @@ class EnrollmentController extends Controller
     public function update(UpdateEnrollmentRequest $request, Enrollment $enrollment)
     {
         $enrollment->update($request->enrollmentData());
+        $this->replaceDocuments($enrollment, $request->documentFiles());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']));
+    }
+
+    /** Descargar un documento de la matrícula (dueño, admin o coordinador). */
+    public function downloadDocument(Enrollment $enrollment, string $document)
+    {
+        Gate::authorize('view', $enrollment);
+
+        $file = $enrollment->findDocument($document) ?? abort(404, 'El documento no existe.');
+
+        return $this->files->download($file['path'], $file['name']);
+    }
+
+    /**
+     * Los documentos enviados reemplazan a los anteriores. Primero se guardan
+     * los nuevos y la matrícula; después se borran los anteriores del disco.
+     *
+     * @param  list<UploadedFile>  $files
+     */
+    private function replaceDocuments(Enrollment $enrollment, array $files): void
+    {
+        if (! $files) {
+            return;
+        }
+
+        $previous = $enrollment->documentPaths();
+
+        $enrollment->documents = collect($files)
+            ->map(fn (UploadedFile $file) => [
+                'id' => (string) Str::uuid(),
+                ...$this->files->store($file, "enrollments/{$enrollment->id}"),
+            ])
+            ->all();
+        $enrollment->save();
+
+        $this->files->delete($previous);
     }
 
     public function destroy(Enrollment $enrollment)

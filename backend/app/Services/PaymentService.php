@@ -6,6 +6,7 @@ use App\Models\Enrollment;
 use App\Models\Payment;
 use App\Models\SystemSetting;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -26,7 +27,7 @@ class PaymentService
     /** Clave en system_settings con el número de cuotas permitidas (entero, por defecto 1). */
     public const INSTALLMENTS_SETTING = 'enrollment_installments';
 
-    public function __construct(private AuditLogger $audit) {}
+    public function __construct(private AuditLogger $audit, private PrivateFiles $files) {}
 
     /** Costo de matrícula configurado, o null si falta o no es positivo. */
     public function enrollmentCost(): ?float
@@ -89,18 +90,20 @@ class PaymentService
         return $plan;
     }
 
-    /** @param array{enrollment_id: int, amount: float|string, payment_method?: ?string, receipt_url?: ?string, installment_number?: ?int} $data */
+    /** @param array{enrollment_id: int, amount: float|string, receipt: UploadedFile, payment_method?: ?string, installment_number?: ?int} $data */
     public function register(User $student, array $data): Payment
     {
         $enrollment = Enrollment::findOrFail($data['enrollment_id']);
         $balance = $this->outstandingBalance($enrollment);
+        $receipt = $this->files->store($data['receipt'], "payments/{$enrollment->id}");
 
         return Payment::create([
             'student_id' => $student->id,
             'enrollment_id' => $enrollment->id,
             'amount' => $data['amount'],
             'payment_method' => $data['payment_method'] ?? null,
-            'receipt_url' => $data['receipt_url'] ?? null,
+            'receipt_path' => $receipt['path'],
+            'receipt_name' => $receipt['name'],
             'installment_number' => $data['installment_number'] ?? $this->nextInstallmentNumber($enrollment),
             'total_installments' => $this->installmentCount(),
             'installment_plan' => $this->installmentPlan(),
@@ -112,9 +115,22 @@ class PaymentService
         ]);
     }
 
-    /** Corrección de un pago pendiente: solo los campos que envía el estudiante. */
+    /**
+     * Corrección de un pago pendiente: solo los campos que envía el estudiante.
+     * Un comprobante nuevo reemplaza al anterior, que se borra del disco.
+     */
     public function correct(Payment $payment, array $data): Payment
     {
+        $previousReceipt = null;
+
+        if (($data['receipt'] ?? null) instanceof UploadedFile) {
+            $previousReceipt = $payment->receipt_path;
+            $receipt = $this->files->store($data['receipt'], "payments/{$payment->enrollment_id}");
+            $payment->receipt_path = $receipt['path'];
+            $payment->receipt_name = $receipt['name'];
+        }
+        unset($data['receipt']);
+
         $payment->fill($data);
 
         if (array_key_exists('amount', $data)) {
@@ -122,6 +138,7 @@ class PaymentService
         }
 
         $payment->save();
+        $this->files->delete($previousReceipt);
 
         return $payment;
     }

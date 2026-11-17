@@ -80,7 +80,7 @@ class EnrollmentAccessTest extends TestCase
     public function test_el_estudiante_a_no_puede_editar_la_matricula_de_b(): void
     {
         $this->actingAs($this->studentA)
-            ->putJson("/api/enrollments/{$this->enrollmentB->id}", ['step' => 3, 'documents' => ['dni.pdf']])
+            ->putJson("/api/enrollments/{$this->enrollmentB->id}", ['step' => 3, 'documents' => [$this->fakePdf('dni.pdf')]])
             ->assertForbidden();
 
         $this->assertSame(2, $this->enrollmentB->fresh()->current_step);
@@ -116,7 +116,7 @@ class EnrollmentAccessTest extends TestCase
         $approved = Enrollment::factory()->approved()->for($this->studentA, 'student')->create();
 
         $this->actingAs($this->studentA)
-            ->putJson("/api/enrollments/{$approved->id}", ['step' => 3, 'documents' => ['dni.pdf']])
+            ->putJson("/api/enrollments/{$approved->id}", ['step' => 3, 'documents' => [$this->fakePdf('dni.pdf')]])
             ->assertForbidden()
             ->assertJsonPath('message', 'No puedes editar una matrícula que ya fue procesada.');
     }

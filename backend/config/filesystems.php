@@ -33,8 +33,22 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            // false: comparte carpeta con el disco "private" (documentos, comprobantes).
+            // Con true, Laravel publica /storage/{path} (GET con URL firmada y PUT
+            // para subir), que saltaría las policies.
+            'serve' => false,
             'throw' => false,
+            'report' => false,
+        ],
+
+        // Archivos de usuarios (DNI, comprobantes de pago, materiales).
+        // Nunca se sirven directamente: sin 'serve' ni 'url'. Se descargan
+        // solo por rutas autenticadas que aplican las policies.
+        'private' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private'),
+            'visibility' => 'private',
+            'throw' => true,
             'report' => false,
         ],
 
