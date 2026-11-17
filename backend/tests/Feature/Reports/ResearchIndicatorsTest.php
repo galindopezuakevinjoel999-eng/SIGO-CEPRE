@@ -24,12 +24,30 @@ class ResearchIndicatorsTest extends TestCase
 
     // ---------- D1 Eficiencia temporal ----------
 
-    public function test_d1_tiempo_de_aprobacion_de_matricula(): void
+    public function test_d1_tiempo_de_atencion_administrativa(): void
     {
-        // Ana 24 h, Luis 12 h, Rosa 48 h (la del semestre anterior no cuenta).
+        // Envío → aprobación: Ana 18 h, Luis 11,5 h, Rosa 24 h. Jhon (pendiente) y
+        // Mia (rechazada) no se aprobaron; la del semestre anterior no cuenta.
         $this->assertEquals(
-            ['count' => 3, 'average' => 28, 'min' => 12, 'max' => 48, 'average_days' => 1.17],
-            $this->data['d1_time_efficiency']['enrollment_approval_hours'],
+            ['count' => 3, 'average' => 17.83, 'min' => 11.5, 'max' => 24, 'average_days' => 0.74],
+            $this->data['d1_time_efficiency']['enrollment_attention_hours'],
+        );
+    }
+
+    public function test_d1_tiempo_de_registro_del_estudiante(): void
+    {
+        // Creación → envío, en cualquier estado: 6 + 0,5 + 24 + 2 + 0,25 = 32,75 h / 5.
+        $this->assertEquals(
+            ['count' => 5, 'average' => 6.55, 'min' => 0.25, 'max' => 24, 'average_days' => 0.27],
+            $this->data['d1_time_efficiency']['enrollment_registration_hours'],
+        );
+    }
+
+    public function test_d1_la_atencion_es_el_primer_indicador_de_tiempo(): void
+    {
+        $this->assertSame(
+            ['enrollment_attention_hours', 'enrollment_registration_hours', 'payment_validation_hours'],
+            array_keys($this->data['d1_time_efficiency']),
         );
     }
 
@@ -120,7 +138,9 @@ class ResearchIndicatorsTest extends TestCase
             '4. D2 Importaciones de exámenes', '5. D4 Trazabilidad', '6. D4 Acciones por usuario',
         ], array_keys($sheets));
         $this->assertContains(['D4 · Operaciones con registro de auditoría (%)', 75], $sheets['Resumen']);
-        $this->assertSame(['Creación → aprobación de matrícula', 3, 28, 12, 48, 1.17], $sheets['1. D1 Eficiencia temporal (h)'][1]);
+        $this->assertSame(['Atención administrativa: envío → aprobación', 3, 17.83, 11.5, 24, 0.74], $sheets['1. D1 Eficiencia temporal (h)'][1]);
+        $this->assertSame(['Registro del estudiante: creación → envío', 5, 6.55, 0.25, 24, 0.27], $sheets['1. D1 Eficiencia temporal (h)'][2]);
+        $this->assertContains(['D1 · Atención administrativa de matrícula (h promedio)', 17.83], $sheets['Resumen']);
     }
 
     public function test_solo_el_administrador(): void
@@ -140,7 +160,10 @@ class ResearchIndicatorsTest extends TestCase
             ->assertOk()
             ->json();
 
-        $this->assertSame(456, (int) $previous['d1_time_efficiency']['enrollment_approval_hours']['average']); // 19 días
+        // Matrícula anterior a submitted_at: no entra en los tiempos de matrícula.
+        $this->assertSame(0, $previous['d1_time_efficiency']['enrollment_attention_hours']['count']);
+        $this->assertNull($previous['d1_time_efficiency']['enrollment_attention_hours']['average']);
+        $this->assertSame(0, $previous['d1_time_efficiency']['enrollment_registration_hours']['count']);
         $this->assertEquals(100.0, $previous['d4_traceability']['operations']['enrollment_decisions']['rate']);
     }
 }

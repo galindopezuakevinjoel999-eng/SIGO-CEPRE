@@ -90,6 +90,7 @@ class EnrollmentFlowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('current_step', 4)
             ->assertJsonPath('career.code', 'SIS');
+        $this->assertNotNull(\App\Models\Enrollment::find($enrollmentId)->submitted_at, 'El paso 4 envía la matrícula a revisión');
 
         // ── 5. Pago 1 (cuota 1 de 2) ────────────────────────────────
         $payment1 = $this->as($studentToken)->postJson('/api/payments', [

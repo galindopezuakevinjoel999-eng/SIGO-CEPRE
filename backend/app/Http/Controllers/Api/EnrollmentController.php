@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\EnrollmentCodeException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Enrollment\EnrollmentStepRequest;
 use App\Http\Requests\Enrollment\StoreEnrollmentRequest;
 use App\Http\Requests\Enrollment\UpdateEnrollmentRequest;
 use App\Http\Requests\Enrollment\UpdateEnrollmentStatusRequest;
@@ -72,6 +73,7 @@ class EnrollmentController extends Controller
 
         $enrollment = Enrollment::create($data);
         $this->replaceDocuments($enrollment, $request->documentFiles());
+        $this->markSubmitted($enrollment, $request->step());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']), 201);
     }
@@ -91,8 +93,22 @@ class EnrollmentController extends Controller
     {
         $enrollment->update($request->enrollmentData());
         $this->replaceDocuments($enrollment, $request->documentFiles());
+        $this->markSubmitted($enrollment, $request->step());
 
         return response()->json($enrollment->load(['career', 'classroom', 'semester']));
+    }
+
+    /**
+     * Al confirmar el paso 4 por primera vez, la matrícula queda enviada a
+     * revisión (submitted_at). Si el estudiante la corrige después mientras
+     * sigue pendiente, la fecha no cambia: el tiempo de atención
+     * administrativa (indicador D1) se mide desde el primer envío.
+     */
+    private function markSubmitted(Enrollment $enrollment, int $step): void
+    {
+        if ($step === EnrollmentStepRequest::LAST_STEP && $enrollment->submitted_at === null) {
+            $enrollment->forceFill(['submitted_at' => now()])->save();
+        }
     }
 
     /** Descargar un documento de la matrícula (dueño, admin o coordinador). */

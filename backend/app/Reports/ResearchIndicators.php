@@ -18,9 +18,14 @@ use Illuminate\Support\Collection;
  * Indicadores de la investigación (tesis), por semestre.
  *
  * D1 Eficiencia temporal (horas):
- *    - Matrícula: de su creación (created_at) a su aprobación (approved_at).
+ *    - Atención administrativa (indicador principal): desde que el estudiante
+ *      envía la matrícula al confirmar el paso 4 (submitted_at) hasta que se
+ *      aprueba (approved_at). Mide la gestión del CEPRE, no la del estudiante.
+ *    - Registro del estudiante: desde que crea la matrícula (created_at) hasta
+ *      que la envía (submitted_at), sea cual sea su estado actual.
  *    - Pago: de su registro (created_at) a su validación (validated_at).
- *    Solo casos ya resueltos (aprobados / validados).
+ *    Solo casos con ambas fechas: las matrículas anteriores a submitted_at
+ *    (sin esa fecha) no se cuentan.
  * D2 Exactitud operativa:
  *    - % rechazados sobre lo ya decidido: pagos rechazados / (validados + rechazados);
  *      matrículas rechazadas / (aprobadas + rechazadas). Lo pendiente no cuenta.
@@ -39,7 +44,7 @@ class ResearchIndicators
     public function build(ReportFilters $filters): array
     {
         $semesterId = $filters->semester->id;
-        $enrollments = Enrollment::where('semester_id', $semesterId)->get(['id', 'status', 'created_at', 'approved_at', 'rejected_at', 'rejection_reason']);
+        $enrollments = Enrollment::where('semester_id', $semesterId)->get(['id', 'status', 'created_at', 'submitted_at', 'approved_at', 'rejected_at', 'rejection_reason']);
         $payments = Payment::whereIn('enrollment_id', $enrollments->pluck('id'))->get(['id', 'status', 'created_at', 'validated_at', 'rejection_reason']);
         $exams = Exam::where('semester_id', $semesterId)->get(['id', 'name', 'status', 'results_imported_at']);
         $logs = $this->auditLogsFor($enrollments, $payments, $exams);
@@ -47,9 +52,14 @@ class ResearchIndicators
         return [
             'semester' => $filters->semester->only(['id', 'code', 'name']),
             'd1_time_efficiency' => [
-                'enrollment_approval_hours' => $this->durationStats(
-                    $enrollments->where('status', 'approved')->filter(fn ($e) => $e->approved_at),
-                    fn ($e) => $e->created_at->diffInSeconds($e->approved_at) / 3600,
+                // Indicador principal: gestión administrativa.
+                'enrollment_attention_hours' => $this->durationStats(
+                    $enrollments->where('status', 'approved')->filter(fn ($e) => $e->submitted_at && $e->approved_at),
+                    fn ($e) => $e->submitted_at->diffInSeconds($e->approved_at) / 3600,
+                ),
+                'enrollment_registration_hours' => $this->durationStats(
+                    $enrollments->filter(fn ($e) => $e->submitted_at),
+                    fn ($e) => $e->created_at->diffInSeconds($e->submitted_at) / 3600,
                 ),
                 'payment_validation_hours' => $this->durationStats(
                     $payments->where('status', Payment::STATUS_VALIDATED)->filter(fn ($p) => $p->validated_at),
@@ -79,7 +89,8 @@ class ResearchIndicators
             title: 'Indicadores de investigación',
             filters: $filters->describe(),
             summary: [
-                'D1 · Aprobación de matrícula (h promedio)' => $d1['enrollment_approval_hours']['average'],
+                'D1 · Atención administrativa de matrícula (h promedio)' => $d1['enrollment_attention_hours']['average'],
+                'D1 · Registro del estudiante (h promedio)' => $d1['enrollment_registration_hours']['average'],
                 'D1 · Validación de pago (h promedio)' => $d1['payment_validation_hours']['average'],
                 'D2 · Pagos rechazados (%)' => $d2['payments']['rejected_rate'],
                 'D2 · Matrículas rechazadas (%)' => $d2['enrollments']['rejected_rate'],
@@ -90,7 +101,8 @@ class ResearchIndicators
                 new ReportTable('D1 Eficiencia temporal (h)', [
                     'indicator' => 'Indicador', 'count' => 'Casos', 'average' => 'Promedio', 'min' => 'Mínimo', 'max' => 'Máximo', 'average_days' => 'Promedio (días)',
                 ], [
-                    $timeRow('Creación → aprobación de matrícula', $d1['enrollment_approval_hours']),
+                    $timeRow('Atención administrativa: envío → aprobación', $d1['enrollment_attention_hours']),
+                    $timeRow('Registro del estudiante: creación → envío', $d1['enrollment_registration_hours']),
                     $timeRow('Registro → validación de pago', $d1['payment_validation_hours']),
                 ]),
                 new ReportTable('D2 Rechazos', [
@@ -115,7 +127,7 @@ class ResearchIndicators
                 ], array_map(fn ($u) => [...$u, 'detail' => collect($u['by_action'])->map(fn ($n, $a) => "{$a}: {$n}")->implode(', ')], $d4['actions_by_user'])),
             ],
             notes: [
-                'D1: horas entre las marcas de tiempo del sistema; solo casos ya aprobados o validados.',
+                'D1: horas entre las marcas de tiempo del sistema. Atención administrativa = envío de la matrícula (confirmación del paso 4) → aprobación; es el indicador principal. Solo cuentan los casos con ambas fechas.',
                 'D2: % de rechazo sobre lo ya decidido (lo pendiente no cuenta).',
                 'D4: una operación está trazada si existe su registro en audit_logs.',
             ],

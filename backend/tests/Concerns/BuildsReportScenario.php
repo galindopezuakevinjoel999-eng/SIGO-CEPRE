@@ -21,12 +21,12 @@ use App\Services\PaymentService;
  * Escenario fijo para probar dashboard, reportes e indicadores con valores
  * calculados a mano. Costo de matrícula: S/ 300. Umbrales de faltas: 2 y 3.
  *
- * Semestre 2026-II (activo):
- *  e1 Ana   SIS (A) aula 01  aprobada (24 h)  pagos: 300 validado (12 h)                 → pagado
- *  e2 Luis  SIS (A) aula 01  aprobada (12 h)  pagos: 100 validado (24 h) + 50 pendiente  → parcial, saldo 200
- *  e3 Rosa  PSI (B) aula 02  aprobada (48 h)  pagos: 80 rechazado "Comprobante ilegible" → sin pago, saldo 300
- *  e4 Jhon  ADM (C) sin aula pendiente        pagos: 120 rechazado "comprobante  ilegible" → sin pago, saldo 300
- *  e5 Mia   ADM (C)          rechazada "Documentos incompletos"
+ * Semestre 2026-II (activo). Tiempos: registro (creación → envío) + atención (envío → aprobación):
+ *  e1 Ana   SIS (A) aula 01  aprobada  6 h + 18 h    pagos: 300 validado (12 h)                 → pagado
+ *  e2 Luis  SIS (A) aula 01  aprobada  0,5 h + 11,5 h pagos: 100 validado (24 h) + 50 pendiente → parcial, saldo 200
+ *  e3 Rosa  PSI (B) aula 02  aprobada  24 h + 24 h   pagos: 80 rechazado "Comprobante ilegible" → sin pago, saldo 300
+ *  e4 Jhon  ADM (C) sin aula pendiente 2 h           pagos: 120 rechazado "comprobante  ilegible" → sin pago, saldo 300
+ *  e5 Mia   ADM (C)          rechazada 0,25 h "Documentos incompletos"
  *  Asistencia: Ana P,P,T,F (75 %) · Luis F,F,P (33,3 %, en riesgo) · Rosa F,F,F (0 %, inhabilitada)
  *  Exámenes publicados: Simulacro 1 (01/09) y Simulacro 2 (01/10, el último); Simulacro 3 en borrador.
  *  Auditoría: falta el registro de la aprobación de e3, del rechazo del pago de e4 y de la
@@ -81,11 +81,11 @@ trait BuildsReportScenario
         }
 
         // ── Matrículas ──
-        $this->enroll('ana', 'Ana Quispe', '71000001', 'SIS', '01', 'approved', '2026-08-01 08:00', '2026-08-02 08:00', 'A-SIS-01-262-001');
-        $this->enroll('luis', 'Luis Ccoica', '71000002', 'SIS', '01', 'approved', '2026-08-01 10:00', '2026-08-01 22:00', 'A-SIS-01-262-002');
-        $this->enroll('rosa', 'Rosa Palomino', '71000003', 'PSI', '02', 'approved', '2026-08-03 00:00', '2026-08-05 00:00', 'B-PSI-02-262-001');
-        $this->enroll('jhon', 'Jhon Vargas', '71000004', 'ADM', null, 'pending', '2026-08-04 09:00');
-        $this->enroll('mia', 'Mia Huamán', '71000005', 'ADM', null, 'rejected', '2026-08-04 10:00', rejectionReason: 'Documentos incompletos');
+        $this->enroll('ana', 'Ana Quispe', '71000001', 'SIS', '01', 'approved', '2026-08-01 08:00', '2026-08-02 08:00', 'A-SIS-01-262-001', submittedAt: '2026-08-01 14:00');
+        $this->enroll('luis', 'Luis Ccoica', '71000002', 'SIS', '01', 'approved', '2026-08-01 10:00', '2026-08-01 22:00', 'A-SIS-01-262-002', submittedAt: '2026-08-01 10:30');
+        $this->enroll('rosa', 'Rosa Palomino', '71000003', 'PSI', '02', 'approved', '2026-08-03 00:00', '2026-08-05 00:00', 'B-PSI-02-262-001', submittedAt: '2026-08-04 00:00');
+        $this->enroll('jhon', 'Jhon Vargas', '71000004', 'ADM', null, 'pending', '2026-08-04 09:00', submittedAt: '2026-08-04 11:00');
+        $this->enroll('mia', 'Mia Huamán', '71000005', 'ADM', null, 'rejected', '2026-08-04 10:00', rejectionReason: 'Documentos incompletos', submittedAt: '2026-08-04 10:15');
 
         // ── Pagos ──
         $this->pay('ana', 'ana_full', 300, Payment::STATUS_VALIDATED, '2026-08-01 09:00', '2026-08-01 21:00', partial: false);
@@ -135,7 +135,7 @@ trait BuildsReportScenario
         $this->audit($this->admin, AuditLogger::ENROLLMENT_APPROVED, ['enrollment_id' => $old->id]);
     }
 
-    private function enroll(string $key, string $name, string $dni, string $career, ?string $classroom, string $status, string $createdAt, ?string $decidedAt = null, ?string $code = null, ?string $rejectionReason = null): void
+    private function enroll(string $key, string $name, string $dni, string $career, ?string $classroom, string $status, string $createdAt, ?string $decidedAt = null, ?string $code = null, ?string $rejectionReason = null, ?string $submittedAt = null): void
     {
         $this->students[$key] = User::factory()->student()->withCompletedProfile()->create(['name' => $name, 'dni' => $dni]);
 
@@ -147,8 +147,9 @@ trait BuildsReportScenario
             'status' => $status,
             'enrollment_code' => $code,
             'created_at' => $createdAt,
+            'submitted_at' => $submittedAt,
             'approved_at' => $status === 'approved' ? $decidedAt : null,
-            'rejected_at' => $status === 'rejected' ? $createdAt : null,
+            'rejected_at' => $status === 'rejected' ? $submittedAt ?? $createdAt : null,
             'rejection_reason' => $rejectionReason,
         ]);
     }

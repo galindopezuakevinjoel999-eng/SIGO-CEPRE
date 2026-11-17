@@ -28,6 +28,7 @@ class Enrollment extends Model
         'rejected_at',
         'rejection_reason',
         'current_step',
+        // submitted_at no es asignable: lo fija el sistema al confirmar el paso 4.
     ];
 
     protected $casts = [
@@ -35,6 +36,7 @@ class Enrollment extends Model
         'progress' => 'array',
         'approved_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'submitted_at' => 'datetime',
     ];
 
     /** Al eliminar la matrícula se borran sus documentos del disco privado. */
