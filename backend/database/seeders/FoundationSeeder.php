@@ -109,6 +109,12 @@ class FoundationSeeder extends Seeder
             // administrador configure el costo real. DemoSeeder pone valores de prueba.
             ['key' => 'enrollment_cost', 'value' => null, 'type' => 'decimal', 'description' => 'Costo total de la matrícula (S/)'],
             ['key' => 'enrollment_installments', 'value' => '1', 'type' => 'integer', 'description' => 'Número de cuotas en que se puede pagar la matrícula'],
+            // Puntos por defecto de los exámenes (valor que se suma por respuesta; una
+            // penalización va en negativo). Correcta e incorrecta: pendientes de definir
+            // por el CEPRE; sin valor, cada examen debe indicarlos al crearse.
+            ['key' => 'exam_points_correct', 'value' => null, 'type' => 'decimal', 'description' => 'Puntos por respuesta correcta (por defecto)'],
+            ['key' => 'exam_points_wrong', 'value' => null, 'type' => 'decimal', 'description' => 'Puntos por respuesta incorrecta (por defecto; negativo si descuenta)'],
+            ['key' => 'exam_points_blank', 'value' => '0', 'type' => 'decimal', 'description' => 'Puntos por respuesta en blanco (por defecto)'],
         ];
 
         // firstOrCreate: no pisa lo que el administrador ya configuró.

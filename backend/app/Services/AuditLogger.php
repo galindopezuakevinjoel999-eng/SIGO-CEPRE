@@ -21,7 +21,15 @@ class AuditLogger
 
     public const ENROLLMENT_REOPENED = 'enrollment_reopened';
 
-    public function record(User $actor, int $subjectUserId, string $action, ?string $reason = null, array $metadata = []): AuditLog
+    public const EXAM_RESULTS_IMPORTED = 'exam_results_imported';
+
+    public const EXAM_PUBLISHED = 'exam_published';
+
+    /**
+     * @param  ?int  $subjectUserId  estudiante afectado; null cuando la acción afecta a
+     *                               muchos (importar o publicar un examen): el detalle va en metadata.
+     */
+    public function record(User $actor, ?int $subjectUserId, string $action, ?string $reason = null, array $metadata = []): AuditLog
     {
         return AuditLog::create([
             'admin_id' => $actor->id,

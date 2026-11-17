@@ -10,7 +10,6 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Enrollment;
 use App\Models\Payment;
-use App\Models\Grade;
 use App\Models\Attendance;
 use App\Models\SystemNotification;
 use App\Models\Semester;
@@ -122,9 +121,10 @@ class User extends Authenticatable
         return $this->hasMany(Payment::class, 'student_id');
     }
 
-    public function grades()
+    /** Resultados de exámenes (reemplaza a grades). */
+    public function examResults()
     {
-        return $this->hasMany(Grade::class, 'student_id');
+        return $this->hasMany(ExamResult::class, 'student_id');
     }
 
     public function attendances()

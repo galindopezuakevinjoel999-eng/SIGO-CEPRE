@@ -13,7 +13,8 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ScheduleController;
 use App\Http\Controllers\Api\SemesterController;
 use App\Http\Controllers\Api\MaterialController;
-use App\Http\Controllers\Api\GradeController;
+use App\Http\Controllers\Api\ExamController;
+use App\Http\Controllers\Api\ExamResultController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\CarnetController;
 use App\Http\Controllers\Api\NotificationController;
@@ -77,7 +78,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/semesters/current', [SemesterController::class, 'current']);
     Route::apiResource('semesters', SemesterController::class);
     Route::apiResource('materials', MaterialController::class);
-    Route::apiResource('grades', GradeController::class);
+    // Exámenes y resultados (RF30–RF34). Permisos en ExamPolicy.
+    Route::get('/exams/import-template', [ExamController::class, 'template'])->name('exams.template');
+    Route::get('/me/exam-results', [ExamResultController::class, 'mine'])->name('exams.mine');
+    Route::apiResource('exams', ExamController::class);
+    Route::post('/exams/{exam}/import', [ExamController::class, 'import'])->name('exams.import');
+    Route::get('/exams/{exam}/results', [ExamController::class, 'results'])->name('exams.results');
+    Route::put('/exams/{exam}/publish', [ExamController::class, 'publish'])->name('exams.publish');
     Route::apiResource('attendance', AttendanceController::class);
     // Panel de contenido público (MongoDB). Permisos: ContentPolicy (solo admin).
     // Con archivos (portada, adjuntos), editar se envía como POST con _method=PUT.
