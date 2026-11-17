@@ -17,8 +17,11 @@ use App\Http\Controllers\Api\GradeController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\CarnetController;
 use App\Http\Controllers\Api\NotificationController;
-use App\Http\Controllers\Api\NewsController;
-use App\Http\Controllers\Api\AnnouncementController;
+use App\Http\Controllers\PublicController;
+use App\Http\Controllers\Admin\Content\NewsController as AdminNewsController;
+use App\Http\Controllers\Admin\Content\AnnouncementController as AdminAnnouncementController;
+use App\Http\Controllers\Admin\Content\FaqController as AdminFaqController;
+use App\Http\Controllers\Admin\Content\HomeBlockController as AdminHomeBlockController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\UserController;
 
@@ -30,8 +33,14 @@ Route::prefix('auth')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 
-Route::get('/news', [NewsController::class, 'publicIndex']);
-Route::get('/news/{news}', [NewsController::class, 'publicShow']);
+// Sitio público (sin sesión). Contenido en MongoDB: solo lo publicado y vigente.
+Route::prefix('public')->middleware('throttle:60,1')->group(function () {
+    Route::get('/home', [PublicController::class, 'home']);
+    Route::get('/news', [PublicController::class, 'news']);
+    Route::get('/news/{slug}', [PublicController::class, 'newsShow']);
+    Route::get('/announcements', [PublicController::class, 'announcements']);
+    Route::get('/faqs', [PublicController::class, 'faqs']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'logout']);
@@ -70,8 +79,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('materials', MaterialController::class);
     Route::apiResource('grades', GradeController::class);
     Route::apiResource('attendance', AttendanceController::class);
-    Route::apiResource('news', NewsController::class)->except(['index', 'show']);
-    Route::apiResource('announcements', AnnouncementController::class);
+    // Panel de contenido público (MongoDB). Permisos: ContentPolicy (solo admin).
+    // Con archivos (portada, adjuntos), editar se envía como POST con _method=PUT.
+    Route::prefix('admin/content')->name('admin.content.')->group(function () {
+        Route::apiResource('news', AdminNewsController::class)->parameters(['news' => 'id']);
+        Route::apiResource('announcements', AdminAnnouncementController::class)->parameters(['announcements' => 'id']);
+        Route::apiResource('faqs', AdminFaqController::class)->parameters(['faqs' => 'id']);
+        Route::apiResource('home-blocks', AdminHomeBlockController::class)->parameters(['home-blocks' => 'id']);
+    });
     Route::apiResource('reports', ReportController::class);
     Route::apiResource('users', UserController::class);
 

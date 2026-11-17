@@ -123,6 +123,10 @@ return [
             'driver' => 'mongodb',
             'dsn' => env('MONGODB_URI'),
             'database' => env('MONGODB_DATABASE', 'sigo_cepre'),
+            // Sin esto, el driver espera 30 s antes de rendirse si Atlas no responde.
+            'options' => [
+                'serverSelectionTimeoutMS' => (int) env('MONGODB_SERVER_SELECTION_TIMEOUT_MS', 10000),
+            ],
         ],
 
     ],

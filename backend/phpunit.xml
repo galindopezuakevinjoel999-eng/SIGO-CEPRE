@@ -26,6 +26,10 @@
         <env name="DB_CONNECTION" value="sqlite"/>
         <env name="DB_DATABASE" value=":memory:"/>
         <env name="DB_URL" value=""/>
+        <!-- MongoDB: misma conexión de .env (MONGODB_URI), base separada para pruebas.
+             RefreshMongoDatabase se niega a limpiar una base que no termine en _test. -->
+        <env name="MONGODB_DATABASE" value="sigo_cepre_test"/>
+        <env name="MONGODB_SERVER_SELECTION_TIMEOUT_MS" value="5000"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
